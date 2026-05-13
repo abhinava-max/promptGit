@@ -1,4 +1,5 @@
 import typer
+from ai.llm_providers import set_Config
 from misc.heading import clear_screen, show_welcome, console
 
 app = typer.Typer(
@@ -43,9 +44,7 @@ def review():
 # ----------------------------------------------------------------
 @app.command()
 def config():
-    """
-    Configure PromptGitX.
-    """
+    set_Config()
     console.print("Configuring PromptGitX")
 
 
