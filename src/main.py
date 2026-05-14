@@ -1,4 +1,6 @@
 import typer
+from typing import Optional
+
 from ai.llm_providers import set_Config
 from misc.heading import clear_screen, show_welcome, console
 
@@ -43,9 +45,37 @@ def review():
 #                      Config Command
 # ----------------------------------------------------------------
 @app.command()
-def config():
-    set_Config()
+def config(
+    provider: Optional[str] = typer.Option(
+        None,
+        "--provider",
+        "-p",
+        help="LLM provider to configure: groq, openai, anthropic, gemini, ollama.",
+    ),
+    models: Optional[str] = typer.Option(
+        None,
+        "--models",
+        "-m",
+        help="Comma-separated list of up to 5 model names.",
+    ),
+    api_key: Optional[str] = typer.Option(
+        None,
+        "--api-key",
+        help="API key for cloud providers.",
+    ),
+    base_url: Optional[str] = typer.Option(
+        None,
+        "--base-url",
+        help="Base URL for local providers like Ollama.",
+    ),
+):
     console.print("Configuring PromptGitX")
+    set_Config(
+        provider=provider,
+        models=models,
+        api_key=api_key,
+        base_url=base_url,
+    )
 
 
 

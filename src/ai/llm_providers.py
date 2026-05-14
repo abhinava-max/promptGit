@@ -1,3 +1,37 @@
+from rich.text import Text
+from misc.console import console
+
+
+STYLE_TITLE = "bold #c084fc"
+STYLE_ACCENT = "bold #818cf8"
+STYLE_MUTED = "#94a3b8"
+STYLE_DIM = "#64748b"
+STYLE_SUCCESS = "bold #22c55e"
+STYLE_ERROR = "bold #fb7185"
+
+
+def print_error(message: str):
+    console.print(message, style=STYLE_ERROR)
+
+
+def print_success(message: str):
+    console.print(message, style=STYLE_SUCCESS)
+
+
+def print_info(message: str):
+    console.print(message, style=STYLE_MUTED)
+
+
+def print_provider_menu(providers):
+    console.print("\nSelect LLM Provider:\n", style=STYLE_TITLE)
+
+    for key, value in providers.items():
+        line = Text()
+        line.append(f"{key}. ", style=STYLE_DIM)
+        line.append(value["display"], style=STYLE_ACCENT)
+        console.print(line)
+
+
 def set_Config(
     provider: str = None,
     models: str = None,
@@ -110,83 +144,77 @@ def set_Config(
 
         write_env(env_data)
 
-    try:
-        if provider:
-            provider_key = provider.lower().strip()
+    def get_provider_choice(provider_value):
+        if provider_value:
+            provider_key = provider_value.lower().strip()
+
+            if provider_key in PROVIDERS:
+                return PROVIDERS[provider_key]
 
             if provider_key not in PROVIDER_ALIASES:
-                print("Invalid provider.")
-                print("Available providers: groq, openai, anthropic, gemini, ollama")
-                return
+                print_error("Invalid provider.")
+                print_info("Available providers: groq, openai, anthropic, gemini, ollama")
+                return None
 
-            selected_provider = PROVIDERS[PROVIDER_ALIASES[provider_key]]
+            return PROVIDERS[PROVIDER_ALIASES[provider_key]]
 
-            if not models:
-                print("Models are required. Pass models comma-separated.")
-                return
+        print_provider_menu(PROVIDERS)
 
-            model_list = parse_models(models)
-
-            if selected_provider["type"] == "cloud":
-                if not api_key:
-                    print(f"API key is required for {selected_provider['display']}.")
-                    return
-
-                save_provider_config(
-                    selected_provider=selected_provider,
-                    model_list=model_list,
-                    api_key_value=api_key,
-                )
-
-            else:
-                if not base_url:
-                    base_url = "http://localhost:11434"
-
-                save_provider_config(
-                    selected_provider=selected_provider,
-                    model_list=model_list,
-                    base_url_value=base_url,
-                )
-
-            print(f"{selected_provider['display']} configured successfully.")
-            print(f"Current provider set to {selected_provider['name']}.")
-            return
-
-        print("\nSelect LLM Provider:\n")
-
-        for key, value in PROVIDERS.items():
-            print(f"{key}. {value['display']}")
-
-        choice = input("\nEnter your choice 1-5: ").strip()
+        choice = console.input(f"\n[{STYLE_MUTED}]Enter your choice 1-5: [/]").strip()
 
         if choice not in PROVIDERS:
-            print("Invalid choice.")
+            print_error("Invalid choice.")
+            return None
+
+        return PROVIDERS[choice]
+
+    def prompt_api_key(selected_provider):
+        console.print(
+            f"Enter {selected_provider['display']} API Key: ",
+            style=STYLE_MUTED,
+            end="",
+        )
+        return getpass.getpass("").strip()
+
+    def prompt_base_url():
+        entered_base_url = console.input(
+            f"[{STYLE_MUTED}]Enter Ollama Base URL "
+            "(default: http://localhost:11434): [/]"
+        ).strip()
+
+        if not entered_base_url:
+            return "http://localhost:11434"
+
+        return entered_base_url
+
+    def prompt_models():
+        return console.input(
+            f"[{STYLE_MUTED}]Enter up to 5 models, comma-separated: [/]"
+        ).strip()
+
+    try:
+        selected_provider = get_provider_choice(provider)
+
+        if not selected_provider:
             return
 
-        selected_provider = PROVIDERS[choice]
-
-        print(f"\nSelected Provider: {selected_provider['display']}")
+        console.print("\nSelected Provider: ", style=STYLE_MUTED, end="")
+        console.print(selected_provider["display"], style=STYLE_ACCENT)
 
         if selected_provider["type"] == "cloud":
-            api_key = getpass.getpass(
-                f"Enter {selected_provider['display']} API Key: "
-            ).strip()
+            if not api_key:
+                api_key = prompt_api_key(selected_provider)
 
             if not api_key:
-                print("API key is required.")
+                print_error("API key is required.")
                 return
 
         else:
-            base_url = input(
-                "Enter Ollama Base URL [default: http://localhost:11434]: "
-            ).strip()
-
             if not base_url:
-                base_url = "http://localhost:11434"
+                base_url = prompt_base_url()
 
-        models = input(
-            "Enter up to 5 models, comma-separated: "
-        ).strip()
+        if not models:
+            models = prompt_models()
 
         model_list = parse_models(models)
 
@@ -204,8 +232,9 @@ def set_Config(
                 base_url_value=base_url,
             )
 
-        print(f"\n{selected_provider['display']} configured successfully.")
-        print(f"Current provider set to {selected_provider['name']}.")
+        print_success(f"\n{selected_provider['display']} configured successfully.")
+        console.print("Current provider set to ", style=STYLE_MUTED, end="")
+        console.print(f"{selected_provider['name']}.", style=STYLE_ACCENT)
 
     except ValueError as error:
-        print(error)
+        print_error(str(error))

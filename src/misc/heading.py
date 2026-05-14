@@ -2,11 +2,11 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.align import Align
 from pyfiglet import Figlet
+from misc.console import console
 import os
-from rich.console import Console
 import sys
 
-console = Console(color_system="truecolor")
+
 
 def hex_to_rgb(hex_color: str):
     hex_color = hex_color.lstrip("#")
