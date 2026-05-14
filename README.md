@@ -134,6 +134,7 @@ promptgitx analyze --last --json
 promptgitx analyze --last --save report.txt
 promptgitx analyze --last --save report.json
 promptgitx analyze --last --save report.docx
+promptgitx analyze --last --save report.pdf
 ```
 
 If `--save` is not passed, PromptGitX asks whether you want to save the report after displaying it.
