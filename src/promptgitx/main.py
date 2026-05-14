@@ -1,4 +1,3 @@
-from asyncio import wait
 import typer
 from typing import Optional, List
 from pathlib import Path
@@ -118,6 +117,16 @@ def analyze(
         "-s",
         help="Generate a review report for the Staged Changes.",
     ),
+    output_json: Optional[bool] = typer.Option(
+        None,
+        "--json",
+        help="Print the raw structured JSON report.",
+    ),
+    summary: Optional[bool] = typer.Option(
+        None,
+        "--summary",
+        help="Print only the short review summary.",
+    ),
 ):
     """
     Generate a review report.
@@ -151,6 +160,8 @@ def analyze(
     last=last,
     last_n=last_n,
     staged=staged,
+    output_json=bool(output_json),
+    summary_only=bool(summary),
     )
 
 

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from langchain_core.output_parsers import StrOutputParser
 from langgraph.graph import END, START, StateGraph
 
 from .graph_state import ReviewGraphState
+from .json_utils import extract_json_object, to_pretty_json
 from .llm_provider import create_chat_model_with_fallbacks, get_current_model_display
+from .report_builder import build_report, normalize_file_review
 from ..gitcodes.diff_fetcher import (
     get_commit_diff,
     get_compare_diff,
@@ -24,7 +24,7 @@ from ..gitcodes.diff_parser import (
     summarize_diff,
 )
 from ..gitcodes.git_info import get_current_branch, get_repo_root
-from ..prompts import get_chunk_review_prompt, get_final_review_prompt
+from ..prompts import get_chunk_review_prompt
 
 
 MAX_CHUNK_CHARS = 12000
@@ -47,37 +47,6 @@ def get_repo_context() -> str:
         return "Repository context unavailable."
 
     return "\n".join(context_parts)
-
-
-def format_diff_summary(summary: dict[str, Any]) -> str:
-    files = summary.get("files", [])
-    file_lines = [
-        f"- {file['file_path']}: +{file['added_lines']} -{file['removed_lines']}"
-        for file in files
-    ]
-
-    header = (
-        f"Files changed: {summary.get('total_files', 0)}\n"
-        f"Added lines: {summary.get('total_added_lines', 0)}\n"
-        f"Removed lines: {summary.get('total_removed_lines', 0)}"
-    )
-
-    if not file_lines:
-        return header
-
-    return f"{header}\n\nFiles:\n" + "\n".join(file_lines)
-
-
-def format_chunk(chunk: dict[str, Any]) -> str:
-    trimmed_note = "\n\n[Diff trimmed for model context.]" if chunk.get("was_trimmed") else ""
-
-    return (
-        f"File: {chunk.get('file_path', 'unknown')}\n"
-        f"Added lines: {chunk.get('added_lines_count', 0)}\n"
-        f"Removed lines: {chunk.get('removed_lines_count', 0)}\n\n"
-        f"{chunk.get('raw_diff', '')}"
-        f"{trimmed_note}"
-    )
 
 
 def load_diff_node(state: ReviewGraphState) -> ReviewGraphState:
@@ -126,46 +95,72 @@ def review_chunks_node(state: ReviewGraphState) -> ReviewGraphState:
     chunks = state.get("chunks", [])
 
     if not chunks:
-        return {"chunk_reviews": ["No code changes were found in the selected diff."]}
+        return {
+            "chunk_reviews": [],
+            "file_reviews": [],
+        }
 
     chain = get_chunk_review_prompt() | create_chat_model_with_fallbacks() | StrOutputParser()
-    diff_summary = format_diff_summary(state.get("diff_summary", {}))
     chunk_reviews = []
+    file_reviews = []
 
     for index, chunk in enumerate(chunks, start=1):
-        review = chain.invoke(
+        try:
+            raw_review = chain.invoke(
+                {
+                    "mode": state["mode"],
+                    "repo_context": state.get("repo_context", ""),
+                    "file_path": chunk.get("file_path", "unknown"),
+                    "added_lines_count": chunk.get("added_lines_count", 0),
+                    "removed_lines_count": chunk.get("removed_lines_count", 0),
+                    "raw_diff": chunk.get("raw_diff", ""),
+                }
+            )
+            parsed_review = extract_json_object(raw_review)
+            file_review = normalize_file_review(parsed_review, chunk)
+        except Exception as error:
+            file_review = normalize_file_review(
+                {
+                    "file_path": chunk.get("file_path", "unknown"),
+                    "summary": "Model output could not be parsed as valid JSON.",
+                    "issues": [
+                        {
+                            "category": "maintainability",
+                            "severity": "medium",
+                            "line_reference": "file review",
+                            "message": f"AI review for this file failed JSON parsing: {error}",
+                            "suggestion": "Run the review again or inspect this file manually.",
+                        }
+                    ],
+                },
+                chunk,
+            )
+
+        file_reviews.append(file_review)
+        chunk_reviews.append(
             {
-                "mode": state["mode"],
-                "repo_context": state.get("repo_context", ""),
-                "diff_summary": diff_summary,
-                "diff_chunk": format_chunk(chunk),
+                "chunk": index,
+                "file_path": file_review["file_path"],
+                "review": file_review,
             }
         )
-        chunk_reviews.append(f"## Chunk {index}: {chunk.get('file_path', 'unknown')}\n{review}")
 
-    return {"chunk_reviews": chunk_reviews}
+    return {
+        "chunk_reviews": chunk_reviews,
+        "file_reviews": file_reviews,
+    }
 
 
 def final_report_node(state: ReviewGraphState) -> ReviewGraphState:
-    if not state.get("chunks"):
-        return {
-            "final_report": (
-                "No code changes were found for this selection.\n\n"
-                "There is nothing to review yet."
-            )
-        }
-
-    chain = get_final_review_prompt() | create_chat_model_with_fallbacks() | StrOutputParser()
-    report = chain.invoke(
-        {
-            "mode": state["mode"],
-            "model_name": state.get("model_name", get_current_model_display()),
-            "diff_summary": format_diff_summary(state.get("diff_summary", {})),
-            "chunk_reviews": "\n\n".join(state.get("chunk_reviews", [])),
-        }
+    report = build_report(
+        state=state,
+        file_reviews=state.get("file_reviews", []),
     )
 
-    return {"final_report": report}
+    return {
+        "report": report,
+        "final_report": to_pretty_json(report),
+    }
 
 
 def create_review_graph():

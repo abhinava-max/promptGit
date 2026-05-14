@@ -126,6 +126,13 @@ promptgitx analyze --compare main..feature-branch
 promptgitx analyze --pr 123
 ```
 
+Output modes:
+
+```bash
+promptgitx analyze --last --summary
+promptgitx analyze --last --json
+```
+
 ## Configuration
 
 PromptGitX supports the following providers:
