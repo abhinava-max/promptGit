@@ -238,3 +238,14 @@ def set_Config(
 
     except ValueError as error:
         print_error(str(error))
+
+
+def reset_config():
+    from pathlib import Path
+
+    ENV_PATH = Path(".env")
+
+    if ENV_PATH.exists():
+        ENV_PATH.unlink()
+
+    print_success("Configuration reset successfully.")

@@ -1,8 +1,9 @@
 import typer
 from typing import Optional
 
-from ai.llm_providers import set_Config
-from misc.heading import clear_screen, show_welcome, console
+from config.config import set_Config, reset_config
+from misc.heading import clear_screen, show_welcome
+from misc.console import console
 
 app = typer.Typer(
     name="PromptGitX",
@@ -32,7 +33,43 @@ def chat():
 #                   Review Report Command
 # ----------------------------------------------------------------
 @app.command()
-def review():
+def analyze(
+    commit: Optional[str] = typer.Option(
+        None,
+        "--commit",
+        "-c",
+        help="Generate a review report for any Specific Commit.",
+    ),
+    commits: Optional[str] = typer.Option(
+        None,
+        "--commits",
+        "-C",
+        help="Generate a review report for Multiple Commits.",
+    ),
+    compare: Optional[str] = typer.Option(
+        None,
+        "--compare",
+        "-p",
+        help="Compare multiple branches/tags/commits",
+    ),
+    pr: Optional[int] = typer.Option(
+        None,
+        "--pr",
+        help="Generate a review report for a Pull Request.",
+    ),
+    last: Optional[int] = typer.Option(
+        1,
+        "--last",
+        "-l",
+        help="Generate a review report for the last n Commits.",
+    ),
+    staged: Optional[bool] = typer.Option(
+        None,
+        "--staged",
+        "-s",
+        help="Generate a review report for the Staged Changes.",
+    ),
+):
     """
     Generate a review report for the staged changes.
     """
@@ -68,14 +105,27 @@ def config(
         "--base-url",
         help="Base URL for local providers like Ollama.",
     ),
+    reset: Optional[bool] = typer.Option(
+        None,
+        "--reset",
+        "-r",
+        help="Reset configurations.",
+    ),
 ):
-    console.print("Configuring PromptGitX")
-    set_Config(
-        provider=provider,
-        models=models,
-        api_key=api_key,
-        base_url=base_url,
-    )
+    """
+    Configure PromptGitX
+    """
+    if reset:
+        console.print("Resetting configurations")
+        reset_config()
+        return
+    else:
+        set_Config(
+            provider=provider,
+            models=models,
+            api_key=api_key,
+            base_url=base_url,
+        )
 
 
 
