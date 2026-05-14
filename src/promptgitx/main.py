@@ -168,7 +168,7 @@ def analyze(
     save: Optional[str] = typer.Option(
         None,
         "--save",
-        help="Save the report to a .txt or .json file.",
+        help="Save the report to a .json, .txt, or .docx file.",
     ),
 ):
     """

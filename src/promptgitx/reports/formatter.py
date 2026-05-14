@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from rich.console import Group
+from rich.panel import Panel
+from rich.table import Table
 from rich.text import Text
 
 
@@ -18,6 +21,7 @@ STYLE_REMOVED = "bold #fb7185"
 STYLE_RED = "bold #fb7185"
 STYLE_YELLOW = "bold #facc15"
 STYLE_GREEN = "bold #22c55e"
+STYLE_BORDER = "#6366f1"
 
 
 def title_case(value: str | None) -> str:
@@ -213,11 +217,12 @@ def format_summary_report(report: dict[str, Any]) -> str:
 
 
 def render_header(title: str) -> Text:
-    text = Text()
-    text.append(f"{LINE}\n", style=STYLE_MUTED)
-    text.append(f"{title}\n", style=STYLE_TITLE)
-    text.append(LINE, style=STYLE_MUTED)
-    return text
+    text = Text(title, style=STYLE_TITLE, justify="center")
+    return Panel(
+        text,
+        border_style=STYLE_BORDER,
+        padding=(1, 2),
+    )
 
 
 def render_target(report: dict[str, Any]) -> Text:
@@ -225,7 +230,6 @@ def render_target(report: dict[str, Any]) -> Text:
     mode = target.get("mode", "unknown")
     value = target.get("value")
     text = Text()
-    text.append("Target:\n", style=STYLE_SECTION)
     append_label(text, "Mode: ")
     text.append(f"{title_case(mode)} Review\n")
 
@@ -235,57 +239,83 @@ def render_target(report: dict[str, Any]) -> Text:
         append_label(text, "Target: ")
         text.append(str(value))
 
-    return text
+    return Panel(
+        text,
+        title="[bold #c084fc]Review Target[/bold #c084fc]",
+        border_style=STYLE_BORDER,
+        padding=(1, 2),
+    )
 
 
 def render_summary(report: dict[str, Any]) -> Text:
     summary = report.get("summary", {})
     risk_level = summary.get("risk_level", "low")
     recommendation = summary.get("final_recommendation", "APPROVE")
-    text = Text()
-    text.append("Summary:\n", style=STYLE_SECTION)
-    append_label(text, "Files Reviewed: ")
-    text.append(f"{summary.get('files_reviewed', 0)}\n")
-    append_label(text, "Lines Added: ")
-    text.append(f"{summary.get('lines_added', 0)}\n", style=STYLE_ADDED)
-    append_label(text, "Lines Removed: ")
-    text.append(f"{summary.get('lines_removed', 0)}\n", style=STYLE_REMOVED)
-    append_label(text, "Overall Risk: ")
-    text.append(f"{title_case(risk_level)}\n", style=risk_style(risk_level))
-    append_label(text, "Final Recommendation: ")
-    text.append(uppercase(recommendation), style=recommendation_style(recommendation))
-    return text
+    table = Table(
+        show_header=False,
+        box=None,
+        expand=True,
+        padding=(0, 2),
+    )
+    table.add_column("Metric", style=STYLE_LABEL, ratio=2)
+    table.add_column("Value", ratio=3)
+    table.add_row("Files Reviewed", str(summary.get("files_reviewed", 0)))
+    table.add_row("Lines Added", Text(f"+{summary.get('lines_added', 0)}", style=STYLE_ADDED))
+    table.add_row("Lines Removed", Text(f"-{summary.get('lines_removed', 0)}", style=STYLE_REMOVED))
+    table.add_row("Overall Risk", Text(title_case(risk_level), style=risk_style(risk_level)))
+    table.add_row(
+        "Final Recommendation",
+        Text(uppercase(recommendation), style=recommendation_style(recommendation)),
+    )
+    return Panel(
+        table,
+        title="[bold #c084fc]Summary[/bold #c084fc]",
+        border_style=STYLE_BORDER,
+        padding=(1, 2),
+    )
 
 
 def render_files_changed(report: dict[str, Any]) -> Text:
     files = report.get("files", [])
-    text = Text()
-    text.append("Files Changed:\n", style=STYLE_SECTION)
 
     if not files:
-        text.append("- None found.", style=STYLE_MUTED)
-        return text
+        return Panel(
+            Text("None found.", style=STYLE_MUTED),
+            title="[bold #c084fc]Files Changed[/bold #c084fc]",
+            border_style=STYLE_BORDER,
+            padding=(1, 2),
+        )
 
-    for index, file in enumerate(files):
-        if index:
-            text.append("\n")
-        text.append("- ")
-        append_file(text, str(file.get("file_path", "unknown")))
-        text.append(" (")
-        text.append(f"+{file.get('added_lines', 0)}", style=STYLE_ADDED)
-        text.append(" / ")
-        text.append(f"-{file.get('removed_lines', 0)}", style=STYLE_REMOVED)
-        text.append(")")
+    table = Table(
+        show_header=True,
+        header_style=STYLE_LABEL,
+        border_style=STYLE_MUTED,
+        expand=True,
+        box=None,
+    )
+    table.add_column("File")
+    table.add_column("Added", justify="right")
+    table.add_column("Removed", justify="right")
 
-    return text
+    for file in files:
+        table.add_row(
+            Text(str(file.get("file_path", "unknown")), style=STYLE_FILE),
+            Text(f"+{file.get('added_lines', 0)}", style=STYLE_ADDED),
+            Text(f"-{file.get('removed_lines', 0)}", style=STYLE_REMOVED),
+        )
+
+    return Panel(
+        table,
+        title="[bold #c084fc]Files Changed[/bold #c084fc]",
+        border_style=STYLE_BORDER,
+        padding=(1, 2),
+    )
 
 
 def render_issue_items(title: str, items: list[dict[str, Any]]) -> Text:
     text = Text()
-    text.append(f"{title}:\n", style=STYLE_SECTION)
 
     if not items:
-        text.append("- None found.", style=STYLE_MUTED)
         return text
 
     for index, item in enumerate(items):
@@ -304,94 +334,167 @@ def render_issue_items(title: str, items: list[dict[str, Any]]) -> Text:
     return text
 
 
+def get_clean_checks(report: dict[str, Any]) -> list[str]:
+    issues = report.get("issues", {})
+    checks = [
+        ("Critical", issues.get("critical", [])),
+        ("Breaking", issues.get("breaking_changes", [])),
+        ("Security", issues.get("security", [])),
+        ("Unprofessional Language", issues.get("vulgarity", [])),
+        ("Performance", issues.get("performance", [])),
+    ]
+    return [name for name, items in checks if not items]
+
+
+def render_clean_checks(report: dict[str, Any]) -> Panel:
+    clean_checks = get_clean_checks(report)
+
+    if not clean_checks:
+        text = Text("Issues found in all major check groups.", style=STYLE_YELLOW)
+    else:
+        text = Text()
+        text.append("No findings in: ", style=STYLE_LABEL)
+        text.append(", ".join(clean_checks), style=STYLE_GREEN)
+
+    return Panel(
+        text,
+        title="[bold #c084fc]Clean Checks[/bold #c084fc]",
+        border_style=STYLE_BORDER,
+        padding=(1, 2),
+    )
+
+
+def render_issue_group(title: str, items: list[dict[str, Any]], style: str = STYLE_SECTION):
+    if not items:
+        return None
+
+    table = Table.grid(expand=True)
+    table.add_column()
+
+    for item in items:
+        line = Text()
+        append_file(line, str(item.get("file_path", "unknown")))
+        line.append(": ")
+        line.append(str(item.get("message") or item.get("suggestion") or "No details provided."))
+
+        if item.get("suggestion") and item.get("message"):
+            line.append("\n")
+            append_label(line, "Suggestion: ")
+            line.append(str(item["suggestion"]))
+
+        table.add_row(line)
+
+    return Panel(
+        table,
+        title=f"[{style}]{title}[/{style}]",
+        border_style=STYLE_BORDER,
+        padding=(1, 2),
+    )
+
+
 def render_file_wise_issues(report: dict[str, Any]) -> Text:
-    text = Text()
-    text.append("File-wise Issues:\n", style=STYLE_SECTION)
     files = report.get("files", [])
+    issue_panels = []
     has_issues = False
 
     for file in files:
         for issue in file.get("issues", []):
-            if has_issues:
-                text.append("\n")
             has_issues = True
             severity = uppercase(issue.get("severity"))
-            text.append("- [")
-            text.append(severity, style=severity_style(severity))
-            text.append("] ")
-            text.append(title_case(issue.get("category")), style=STYLE_LABEL)
-            text.append("\n  ")
-            append_label(text, "File: ")
-            append_file(text, str(file.get("file_path", "unknown")))
-            text.append("\n  ")
-            append_label(text, "Problem: ")
-            text.append(str(issue.get("message", "No details provided.")))
+            body = Text()
+            body.append("[")
+            body.append(severity, style=severity_style(severity))
+            body.append("] ")
+            body.append(title_case(issue.get("category")), style=STYLE_LABEL)
+            body.append("\n")
+            append_label(body, "File: ")
+            append_file(body, str(file.get("file_path", "unknown")))
+            body.append("\n")
+            append_label(body, "Problem: ")
+            body.append(str(issue.get("message", "No details provided.")))
 
             if issue.get("line_reference"):
-                text.append("\n  ")
-                append_label(text, "Reference: ")
-                text.append(str(issue["line_reference"]))
+                body.append("\n")
+                append_label(body, "Reference: ")
+                body.append(str(issue["line_reference"]))
 
             if issue.get("suggestion"):
-                text.append("\n  ")
-                append_label(text, "Suggestion: ")
-                text.append(str(issue["suggestion"]))
+                body.append("\n")
+                append_label(body, "Suggestion: ")
+                body.append(str(issue["suggestion"]))
+
+            issue_panels.append(
+                Panel(
+                    body,
+                    border_style=severity_style(severity),
+                    padding=(1, 2),
+                )
+            )
 
     if not has_issues:
-        text.append("- None found.", style=STYLE_MUTED)
+        return Panel(
+            Text("None found.", style=STYLE_MUTED),
+            title="[bold #c084fc]File-wise Issues[/bold #c084fc]",
+            border_style=STYLE_BORDER,
+            padding=(1, 2),
+        )
 
-    return text
+    return Panel(
+        Group(*issue_panels),
+        title="[bold #c084fc]File-wise Issues[/bold #c084fc]",
+        border_style=STYLE_BORDER,
+        padding=(1, 1),
+    )
 
 
 def render_final(report: dict[str, Any]) -> Text:
     summary = report.get("summary", {})
     recommendation = summary.get("final_recommendation", "APPROVE")
     text = Text()
-    text.append("Final:\n", style=STYLE_SECTION)
     text.append(f"{uppercase(recommendation)}\n", style=recommendation_style(recommendation))
     append_label(text, "Reason: ")
     text.append(str(report.get("overall_summary", "No summary available.")))
-    return text
+    return Panel(
+        text,
+        title="[bold #c084fc]Final Recommendation[/bold #c084fc]",
+        border_style=recommendation_style(recommendation),
+        padding=(1, 2),
+    )
 
 
-def join_rich_sections(sections: list[Text]) -> Text:
-    output = Text()
-
-    for index, section in enumerate(sections):
-        if index:
-            output.append("\n\n")
-        output.append_text(section)
-
-    return output
-
-
-def render_terminal_report(report: dict[str, Any]) -> Text:
+def render_terminal_report(report: dict[str, Any]) -> Group:
     issues = report.get("issues", {})
-    return join_rich_sections(
+    optional_sections = [
+        render_issue_group("Critical Issues", issues.get("critical", []), STYLE_RED),
+        render_issue_group("Breaking Changes", issues.get("breaking_changes", []), STYLE_RED),
+        render_issue_group("Security Concerns", issues.get("security", []), STYLE_RED),
+        render_issue_group("Code Quality Issues", issues.get("code_quality", []), STYLE_YELLOW),
+        render_issue_group("Unprofessional Language", issues.get("vulgarity", []), STYLE_YELLOW),
+        render_issue_group("Performance Issues", issues.get("performance", []), STYLE_YELLOW),
+        render_issue_group("Improvement Suggestions", issues.get("improvements", []), STYLE_GREEN),
+    ]
+    sections = [
+        render_header("GitPromptX Review Report"),
+        render_target(report),
+        render_summary(report),
+        render_files_changed(report),
+        render_clean_checks(report),
+    ]
+    sections.extend(section for section in optional_sections if section is not None)
+    sections.extend(
         [
-            render_header("GitPromptX Review Report"),
-            render_target(report),
-            render_summary(report),
-            render_files_changed(report),
-            render_issue_items("Critical Issues", issues.get("critical", [])),
-            render_issue_items("Breaking Changes", issues.get("breaking_changes", [])),
-            render_issue_items("Security Concerns", issues.get("security", [])),
-            render_issue_items("Code Quality Issues", issues.get("code_quality", [])),
-            render_issue_items("Unprofessional Language", issues.get("vulgarity", [])),
-            render_issue_items("Performance Issues", issues.get("performance", [])),
             render_file_wise_issues(report),
-            render_issue_items("Improvement Suggestions", issues.get("improvements", [])),
             render_final(report),
         ]
     )
 
+    return Group(*sections)
 
-def render_summary_report(report: dict[str, Any]) -> Text:
-    return join_rich_sections(
-        [
+
+def render_summary_report(report: dict[str, Any]) -> Group:
+    return Group(
             render_header("GitPromptX Review Summary"),
             render_target(report),
             render_summary(report),
             render_final(report),
-        ]
     )
