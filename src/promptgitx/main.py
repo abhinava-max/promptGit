@@ -43,6 +43,44 @@ def show_app_header():
     show_welcome(model_name=get_current_model_display())
 
 
+def get_analyze_mode(
+    commit: Optional[str],
+    commits: Optional[List[str]],
+    compare: Optional[str],
+    pr: Optional[int],
+    last: Optional[bool],
+    last_n: Optional[int],
+    staged: Optional[bool],
+) -> str | None:
+    selected_modes = []
+
+    if commit:
+        selected_modes.append("commit")
+    if commits:
+        selected_modes.append("commits")
+    if compare:
+        selected_modes.append("compare")
+    if pr:
+        selected_modes.append("pr")
+    if last:
+        selected_modes.append("last")
+    if last_n:
+        selected_modes.append("last_n")
+    if staged:
+        selected_modes.append("staged")
+
+    if len(selected_modes) > 1:
+        raise typer.BadParameter(
+            "Use only one review target at a time: --commit, --commits, "
+            "--compare, --pr, --last, --last-n, or --staged."
+        )
+
+    if not selected_modes:
+        return None
+
+    return selected_modes[0]
+
+
 @app.callback(invoke_without_command=True)
 def callback(
     ctx: typer.Context,
@@ -127,30 +165,35 @@ def analyze(
         "--summary",
         help="Print only the short review summary.",
     ),
+    save: Optional[str] = typer.Option(
+        None,
+        "--save",
+        help="Save the report to a .txt or .json file.",
+    ),
 ):
     """
     Generate a review report.
     """
-    show_app_header()
+    if output_json and summary:
+        raise typer.BadParameter("Use either --json or --summary, not both.")
 
-    mode = ""
-    if commit:
-        mode = "commit"
-    elif commits:
-        mode = "commits"
-    elif compare:
-        mode = "compare"
-    elif pr:
-        mode = "pr"
-    elif last:
-        mode = "last"
-    elif last_n:
-        mode = "last_n"
-    elif staged:
-        mode = "staged"
-    else:
+    mode = get_analyze_mode(
+        commit=commit,
+        commits=commits,
+        compare=compare,
+        pr=pr,
+        last=last,
+        last_n=last_n,
+        staged=staged,
+    )
+
+    if mode is None:
+        show_app_header()
         show_analyze_help()
         return
+
+    if not output_json:
+        show_app_header()
 
     generate_report(mode=mode,
     commit=commit,
@@ -162,6 +205,7 @@ def analyze(
     staged=staged,
     output_json=bool(output_json),
     summary_only=bool(summary),
+    save_path=save,
     )
 
 

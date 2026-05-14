@@ -131,7 +131,13 @@ Output modes:
 ```bash
 promptgitx analyze --last --summary
 promptgitx analyze --last --json
+promptgitx analyze --last --save report.txt
+promptgitx analyze --last --save report.json
 ```
+
+If `--save` is not passed, PromptGitX asks whether you want to save the report after displaying it.
+Use only one review target per command, such as `--last` or `--staged`, not both.
+`--json` prints raw JSON without the welcome banner so it can be used in scripts.
 
 ## Configuration
 
