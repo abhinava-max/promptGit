@@ -17,6 +17,7 @@ src/
   promptgitx/
     main.py              # CLI entry point
     ai/                  # AI review/report helpers
+    prompts/             # LangChain prompt templates
     config/              # LLM provider configuration helpers
     gitcodes/            # Git diff and repository helpers
     misc/                # Rich/figlet terminal UI helpers
@@ -61,6 +62,12 @@ View available commands:
 
 ```bash
 promptgitx --help
+```
+
+Show the installed version:
+
+```bash
+promptgitx --version
 ```
 
 You can also run directly from source without installing:
@@ -130,6 +137,24 @@ PromptGitX supports the following providers:
 - Ollama
 
 The `config` command writes provider settings to a `.env` file, including the current provider, API key or base URL, and up to five model names.
+
+The welcome screen displays the active model as:
+
+```text
+Model: <PROVIDER> | <MODEL_NAME>
+```
+
+PromptGitX uses the first configured model for the active provider first, then prepares the remaining configured models as fallbacks for later LangGraph/agent workflows.
+
+## Analyze Workflow
+
+The `analyze` command uses a LangGraph workflow:
+
+```text
+load_diff -> parse_diff -> review_chunks -> final_report
+```
+
+It reuses the existing Git helpers to collect diffs, parses and chunks the diff, reviews each chunk with the configured LLM, then synthesizes a final report. The first configured model is used first; additional configured models are attached as fallbacks.
 
 ## Build For Upload
 

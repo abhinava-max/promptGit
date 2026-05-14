@@ -1,0 +1,682 @@
+For your **GitPromptX review/analyzer**, the terminal output should be **clean, structured, and developer-friendly**.
+
+Your tool should not output huge AI paragraphs. It should output a **review report**.
+
+---
+
+# 1. What should be in the output?
+
+Your final output should have these sections:
+
+```text
+GitPromptX Review Report
+```
+
+## 1. Review Target
+
+Tell what is being reviewed.
+
+Example:
+
+```text
+Mode: Commit Review
+Commit: abc123
+```
+
+or:
+
+```text
+Mode: Compare Review
+Compare: main..feature-login
+```
+
+or:
+
+```text
+Mode: PR Review
+PR: #24
+```
+
+---
+
+## 2. Summary
+
+Short overview.
+
+Example:
+
+```text
+Files Reviewed: 4
+Lines Added: 120
+Lines Removed: 35
+Overall Risk: Medium
+Final Recommendation: Request Changes
+```
+
+---
+
+## 3. Files Changed
+
+List the files.
+
+Example:
+
+```text
+Files Changed:
+- backend/auth.py (+45 / -12)
+- frontend/login.js (+30 / -8)
+- README.md (+10 / -2)
+```
+
+---
+
+## 4. Critical Issues
+
+This should show serious problems only.
+
+Example:
+
+```text
+Critical Issues:
+- backend/auth.py: Possible hardcoded secret found.
+- frontend/login.js: Login response key changed but frontend handling may break.
+```
+
+If none:
+
+```text
+Critical Issues:
+- None found.
+```
+
+---
+
+## 5. Code Quality Issues
+
+Example:
+
+```text
+Code Quality Issues:
+- backend/auth.py: Function name `doLoginStuff` is unclear.
+- backend/user.py: Repeated logic can be moved into helper function.
+```
+
+---
+
+## 6. Possible Breaking Changes
+
+Example:
+
+```text
+Possible Breaking Changes:
+- API response changed from `token` to `access_token`.
+- Function parameter `user_id` was removed from `get_user()`.
+```
+
+---
+
+## 7. Security Concerns
+
+Example:
+
+```text
+Security Concerns:
+- Possible API key added in config.py.
+- Password validation logic changed. Manual review required.
+```
+
+---
+
+## 8. Vulgar / Unprofessional Language
+
+Example:
+
+```text
+Unprofessional Language:
+- comment in app/main.py contains "stupid"
+- function name `dumb_fix()` should be renamed
+```
+
+If none:
+
+```text
+Unprofessional Language:
+- None found.
+```
+
+---
+
+## 9. Performance Issues
+
+Example:
+
+```text
+Performance Issues:
+- Loop makes repeated database calls. Consider batching query.
+```
+
+---
+
+## 10. Improvement Suggestions
+
+Example:
+
+```text
+Improvement Suggestions:
+- Add validation for empty email/password.
+- Add test cases for invalid login.
+- Use clear response schema for auth endpoint.
+```
+
+---
+
+## 11. Final Recommendation
+
+Use only one of these:
+
+```text
+APPROVE
+REQUEST_CHANGES
+NEEDS_MANUAL_REVIEW
+```
+
+Example:
+
+```text
+Final Recommendation: REQUEST_CHANGES
+Reason: Possible breaking API response change and missing validation.
+```
+
+---
+
+# 2. Best terminal output format
+
+Use this kind of output:
+
+```text
+────────────────────────────────────
+GitPromptX Review Report
+────────────────────────────────────
+
+Target:
+Mode: Compare Review
+Compare: main..feature-login
+
+Summary:
+Files Reviewed: 3
+Lines Added: 85
+Lines Removed: 22
+Overall Risk: Medium
+Final Recommendation: REQUEST_CHANGES
+
+Files Changed:
+- backend/auth.py (+40 / -10)
+- frontend/login.js (+35 / -8)
+- README.md (+10 / -4)
+
+Critical Issues:
+- None found.
+
+Breaking Changes:
+- backend/auth.py: Login response changed from `token` to `access_token`.
+  Suggestion: Check frontend code before merging.
+
+Security Concerns:
+- backend/auth.py: Password handling logic changed.
+  Suggestion: Add tests for invalid password and empty password.
+
+Code Quality:
+- frontend/login.js: Error handling is missing for failed login request.
+
+Unprofessional Language:
+- None found.
+
+Improvement Suggestions:
+- Add response schema for login API.
+- Add unit tests for auth failure cases.
+- Update frontend to use `access_token`.
+
+Final:
+REQUEST_CHANGES
+```
+
+This is simple and readable in terminal.
+
+---
+
+# 3. What should AI return?
+
+AI should return **JSON**, not normal text.
+
+Because JSON is easy to parse and then you can print it nicely in terminal.
+
+Use this structure:
+
+```json
+{
+  "overall_summary": "The changes add login functionality but include possible breaking API response changes.",
+  "risk_level": "medium",
+  "final_recommendation": "REQUEST_CHANGES",
+  "files_reviewed": [
+    {
+      "file_path": "backend/auth.py",
+      "summary": "Login API response and password validation were changed.",
+      "issues": [
+        {
+          "category": "breaking_change",
+          "severity": "high",
+          "line_reference": "changed response object",
+          "message": "Response key changed from token to access_token.",
+          "suggestion": "Update frontend consumers or maintain backward compatibility."
+        }
+      ]
+    }
+  ],
+  "critical_issues": [],
+  "security_concerns": [],
+  "code_quality_issues": [],
+  "breaking_changes": [],
+  "vulgarity_or_unprofessional_language": [],
+  "performance_issues": [],
+  "improvement_suggestions": []
+}
+```
+
+---
+
+# 4. Categories you should force in prompt
+
+Tell AI to classify every issue into one of these categories:
+
+```text
+bug
+breaking_change
+security
+performance
+code_quality
+vulgarity
+standards
+testing
+documentation
+maintainability
+```
+
+Severity should be only:
+
+```text
+low
+medium
+high
+critical
+```
+
+Recommendation should be only:
+
+```text
+APPROVE
+REQUEST_CHANGES
+NEEDS_MANUAL_REVIEW
+```
+
+Risk level should be only:
+
+```text
+low
+medium
+high
+critical
+```
+
+This prevents messy output.
+
+---
+
+# 5. What should be given in the prompt?
+
+Your AI prompt needs these things:
+
+```text
+1. Role
+2. Task
+3. Review rules
+4. Diff content
+5. Output JSON schema
+6. Strict instruction to return JSON only
+```
+
+---
+
+# 6. Strong review prompt
+
+Create this file:
+
+```text
+prompts/review_prompt.txt
+```
+
+Use this prompt:
+
+```text
+You are GitPromptX, an expert AI code reviewer.
+
+Your task is to review the provided Git diff and detect issues before the code is merged.
+
+Review the diff for:
+1. Bugs or logic problems
+2. Possible breaking changes
+3. Security concerns
+4. Performance problems
+5. Code quality and coding standards
+6. Vulgar, offensive, or unprofessional language
+7. Missing validation or error handling
+8. Missing tests
+9. Maintainability problems
+10. Improvement suggestions
+
+Important rules:
+- Review only the provided diff.
+- Do not assume files that are not shown.
+- Do not invent issues.
+- If something needs human review, clearly mention it.
+- Be concise and practical.
+- Focus on changed code.
+- If the issue is not certain, mark it as "needs_manual_review".
+- Do not return markdown.
+- Return valid JSON only.
+
+Severity rules:
+- critical: secrets, dangerous security issue, data loss, authentication bypass
+- high: likely bug, likely breaking change, unsafe logic
+- medium: code quality issue, missing validation, maintainability issue
+- low: naming, formatting, minor improvement
+
+Final recommendation rules:
+- APPROVE: no important issues found
+- REQUEST_CHANGES: high/critical issues or clear bugs found
+- NEEDS_MANUAL_REVIEW: uncertain behavior, sensitive logic, large incomplete context
+
+Return exactly this JSON format:
+
+{
+  "overall_summary": "short summary of the changes",
+  "risk_level": "low | medium | high | critical",
+  "final_recommendation": "APPROVE | REQUEST_CHANGES | NEEDS_MANUAL_REVIEW",
+  "files_reviewed": [
+    {
+      "file_path": "path/to/file",
+      "summary": "short file-level summary",
+      "issues": [
+        {
+          "category": "bug | breaking_change | security | performance | code_quality | vulgarity | standards | testing | documentation | maintainability",
+          "severity": "low | medium | high | critical",
+          "line_reference": "line, function, or changed block if known",
+          "message": "clear explanation of the issue",
+          "suggestion": "specific improvement suggestion"
+        }
+      ]
+    }
+  ],
+  "critical_issues": [
+    {
+      "file_path": "path/to/file",
+      "message": "issue message",
+      "suggestion": "fix suggestion"
+    }
+  ],
+  "security_concerns": [
+    {
+      "file_path": "path/to/file",
+      "message": "issue message",
+      "suggestion": "fix suggestion"
+    }
+  ],
+  "breaking_changes": [
+    {
+      "file_path": "path/to/file",
+      "message": "issue message",
+      "suggestion": "fix suggestion"
+    }
+  ],
+  "vulgarity_or_unprofessional_language": [
+    {
+      "file_path": "path/to/file",
+      "message": "issue message",
+      "suggestion": "fix suggestion"
+    }
+  ],
+  "performance_issues": [
+    {
+      "file_path": "path/to/file",
+      "message": "issue message",
+      "suggestion": "fix suggestion"
+    }
+  ],
+  "code_quality_issues": [
+    {
+      "file_path": "path/to/file",
+      "message": "issue message",
+      "suggestion": "fix suggestion"
+    }
+  ],
+  "improvement_suggestions": [
+    {
+      "file_path": "path/to/file",
+      "suggestion": "specific suggestion"
+    }
+  ]
+}
+
+Git diff to review:
+
+{{DIFF_CONTENT}}
+```
+
+---
+
+# 7. Better prompt with file info
+
+When sending chunk by chunk, give file name separately.
+
+Example prompt data:
+
+```text
+File Path:
+backend/auth.py
+
+Added Lines:
+45
+
+Removed Lines:
+12
+
+Diff:
+<diff here>
+```
+
+This helps AI understand the file.
+
+Prompt format:
+
+```text
+You are reviewing one changed file.
+
+File path:
+{{FILE_PATH}}
+
+Added lines:
+{{ADDED_LINES_COUNT}}
+
+Removed lines:
+{{REMOVED_LINES_COUNT}}
+
+Git diff:
+{{RAW_DIFF}}
+
+Return JSON only.
+```
+
+---
+
+# 8. What should go to AI?
+
+From your `chunk_diff_by_file()` function, send this:
+
+```python
+{
+    "file_path": "backend/auth.py",
+    "added_lines_count": 45,
+    "removed_lines_count": 12,
+    "raw_diff": "diff --git ..."
+}
+```
+
+Do not send:
+
+```text
+full project
+all files
+.git folder
+node_modules
+venv
+```
+
+Only send changed file diffs.
+
+---
+
+# 9. What should be printed in terminal?
+
+Do not print raw JSON by default.
+
+Print a clean report.
+
+Example terminal output:
+
+```text
+GitPromptX Review Report
+
+Summary:
+- Files reviewed: 3
+- Added lines: 85
+- Removed lines: 22
+- Risk level: Medium
+- Recommendation: REQUEST_CHANGES
+
+Issues Found:
+
+[HIGH] Breaking Change
+File: backend/auth.py
+Problem: Login response changed from `token` to `access_token`.
+Suggestion: Update frontend usage or keep backward compatibility.
+
+[MEDIUM] Code Quality
+File: frontend/login.js
+Problem: Missing error handling for failed login API call.
+Suggestion: Add try/catch and show user-friendly error.
+
+No vulgar language found.
+No critical security issue found.
+```
+
+---
+
+# 10. Add output modes
+
+Your CLI should support:
+
+```bash
+gitpromptx review --last
+```
+
+Normal terminal report.
+
+```bash
+gitpromptx review --last --json
+```
+
+Raw JSON output.
+
+```bash
+gitpromptx review --last --save report.md
+```
+
+Save Markdown report.
+
+```bash
+gitpromptx review --last --summary
+```
+
+Only show short summary.
+
+---
+
+# 11. Final output structure in Python
+
+Use this internal report structure:
+
+```python
+report = {
+    "target": {
+        "mode": "commit",
+        "value": "abc123"
+    },
+    "summary": {
+        "files_reviewed": 3,
+        "lines_added": 85,
+        "lines_removed": 22,
+        "risk_level": "medium",
+        "final_recommendation": "REQUEST_CHANGES"
+    },
+    "files": [
+        {
+            "file_path": "backend/auth.py",
+            "added_lines": 45,
+            "removed_lines": 12,
+            "issues": []
+        }
+    ],
+    "issues": {
+        "critical": [],
+        "security": [],
+        "breaking_changes": [],
+        "vulgarity": [],
+        "performance": [],
+        "code_quality": [],
+        "improvements": []
+    }
+}
+```
+
+This is easy to print in terminal and save as JSON.
+
+---
+
+# 12. Best final answer
+
+Your tool should output:
+
+```text
+1. What was reviewed
+2. How many files/lines changed
+3. Overall risk level
+4. Final recommendation
+5. File-wise issues
+6. Critical/security/breaking issues
+7. Vulgar language check result
+8. Improvement suggestions
+9. Optional JSON/Markdown report
+```
+
+Your prompt should include:
+
+```text
+1. AI role as code reviewer
+2. Exact review categories
+3. Severity rules
+4. Recommendation rules
+5. Diff content
+6. Strict JSON schema
+7. JSON-only instruction
+```
+
+That will make it run well in the terminal because the AI gives structured JSON, and your Python code converts it into a clean CLI report.

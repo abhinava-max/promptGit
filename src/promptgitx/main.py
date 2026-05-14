@@ -1,7 +1,10 @@
+from asyncio import wait
 import typer
 from typing import Optional, List
 from pathlib import Path
 import sys
+import asyncio
+
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -11,12 +14,16 @@ if __package__ in (None, ""):
     from promptgitx.misc.console import console
     from promptgitx.misc.analyzer_help import show_analyze_help
     from promptgitx.ai.pr_analyzer import generate_report
+    from promptgitx.ai.llm_provider import get_current_model_display
+    from promptgitx import __version__
 else:
     from .config.config import set_Config, reset_config
     from .misc.heading import clear_screen, show_welcome
     from .misc.console import console
     from .misc.analyzer_help import show_analyze_help
     from .ai.pr_analyzer import generate_report
+    from .ai.llm_provider import get_current_model_display
+    from . import __version__
 
 app = typer.Typer(
     name="PromptGitX",
@@ -24,11 +31,32 @@ app = typer.Typer(
     add_completion=False,
 )
 
+def print_version(value: bool):
+    if value:
+        console.print(f"PromptGitX {__version__}")
+        raise typer.Exit()
+
+
+def show_app_header():
+    console.print("[yellow]Please wait, PromptGitX is loading...[/yellow]")
+    asyncio.run(asyncio.sleep(2))
+    clear_screen()
+    show_welcome(model_name=get_current_model_display())
+
+
 @app.callback(invoke_without_command=True)
-def callback(ctx: typer.Context):
+def callback(
+    ctx: typer.Context,
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        callback=print_version,
+        is_eager=True,
+        help="Show the PromptGitX version and exit.",
+    ),
+):
     if ctx.invoked_subcommand is None:
-        clear_screen()
-        show_welcome()
+        show_app_header()
 
 # ----------------------------------------------------------------
 #                    AI-Agent Command
@@ -38,6 +66,7 @@ def chat():
     """
     Start the AI chat interface to generate Git commit messages.
     """
+    show_app_header()
     console.print("Chat is running")
 
 
@@ -93,6 +122,8 @@ def analyze(
     """
     Generate a review report.
     """
+    show_app_header()
+
     mode = ""
     if commit:
         mode = "commit"
@@ -162,6 +193,8 @@ def config(
     """
     Configure PromptGitX
     """
+    show_app_header()
+
     if reset:
         console.print("Resetting configurations")
         reset_config()
@@ -180,8 +213,6 @@ def config(
 #                    Main Function
 # ----------------------------------------------------------------
 def main():
-    clear_screen()
-    show_welcome()
     app()
 
 if __name__ == "__main__":
