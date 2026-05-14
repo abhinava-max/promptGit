@@ -2,7 +2,7 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.align import Align
 from pyfiglet import Figlet
-from misc.console import console
+from .console import console
 import os
 import sys
 
@@ -62,10 +62,13 @@ def get_gradient_text(text: str) -> Text:
 
     return t
 
-def show_welcome():
+def show_welcome(model_name: str | None = None):
     heading = get_gradient_text("PromptGitX")
 
     subtitle = Text("AI-powered Git commit assistant", style="bold #a78bfa")
+    model_text = Text()
+    model_text.append("Model: ", style="#64748b")
+    model_text.append(model_name or "Not configured", style="bold #818cf8")
     description = Text(
         "Generate clean, meaningful, and professional Git commit messages.",
         style="#94a3b8",
@@ -79,6 +82,8 @@ def show_welcome():
     content = Text()
     content.append("\n")
     content.append(subtitle)
+    content.append("\n")
+    content.append(model_text)
     content.append("\n")
     content.append(description)
     content.append("\n\n")
