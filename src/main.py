@@ -1,8 +1,9 @@
 import typer
 from typing import Optional
 
-from ai.llm_providers import set_Config
-from misc.heading import clear_screen, show_welcome, console
+from config.config import set_Config, reset_config
+from misc.heading import clear_screen, show_welcome
+from misc.console import console
 
 app = typer.Typer(
     name="PromptGitX",
@@ -32,7 +33,7 @@ def chat():
 #                   Review Report Command
 # ----------------------------------------------------------------
 @app.command()
-def review():
+def analyze():
     """
     Generate a review report for the staged changes.
     """
@@ -68,14 +69,25 @@ def config(
         "--base-url",
         help="Base URL for local providers like Ollama.",
     ),
+    reset: Optional[bool] = typer.Option(
+        None,
+        "--reset",
+        "-r",
+        help="Reset configurations.",
+    ),
 ):
     console.print("Configuring PromptGitX")
-    set_Config(
-        provider=provider,
-        models=models,
-        api_key=api_key,
-        base_url=base_url,
-    )
+    if reset:
+        console.print("Resetting configurations")
+        reset_config()
+        return
+    else:
+        set_Config(
+            provider=provider,
+            models=models,
+            api_key=api_key,
+            base_url=base_url,
+        )
 
 
 
