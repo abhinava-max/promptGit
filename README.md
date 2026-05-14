@@ -37,7 +37,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-For package-style local development:
+For package-style local development, install the project in editable mode:
 
 ```bash
 pip install -e .
@@ -46,12 +46,12 @@ pip install -e .
 3. Create your environment file:
 
 ```bash
-cp src/.env.example .env
+cp .env.example .env
 ```
 
-## Usage
+## How To Run
 
-Run the CLI after installing locally:
+Recommended local development command after `pip install -e .`:
 
 ```bash
 promptgitx
@@ -63,10 +63,37 @@ View available commands:
 promptgitx --help
 ```
 
-Configure an LLM provider:
+You can also run directly from source without installing:
+
+```bash
+python3 src/promptgitx/main.py
+```
+
+Or run it as a package module:
+
+```bash
+PYTHONPATH=src python3 -m promptgitx.main
+```
+
+## Commands
+
+Configure an LLM provider interactively:
 
 ```bash
 promptgitx config
+```
+
+Configure a provider with CLI options:
+
+```bash
+promptgitx config --provider ollama --models llama3
+promptgitx config --provider openai --models gpt-4o-mini --api-key YOUR_API_KEY
+```
+
+Reset configuration:
+
+```bash
+promptgitx config --reset
 ```
 
 Start the chat command:
@@ -81,6 +108,17 @@ Generate a review report:
 promptgitx analyze
 ```
 
+Analyze examples:
+
+```bash
+promptgitx analyze --staged
+promptgitx analyze --last
+promptgitx analyze --last-n 3
+promptgitx analyze --commit COMMIT_HASH
+promptgitx analyze --compare main..feature-branch
+promptgitx analyze --pr 123
+```
+
 ## Configuration
 
 PromptGitX supports the following providers:
@@ -92,6 +130,20 @@ PromptGitX supports the following providers:
 - Ollama
 
 The `config` command writes provider settings to a `.env` file, including the current provider, API key or base URL, and up to five model names.
+
+## Build For Upload
+
+Build source and wheel distributions:
+
+```bash
+python3 -m build --sdist --wheel
+```
+
+The files will be created in:
+
+```text
+dist/
+```
 
 ## Status
 

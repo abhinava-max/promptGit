@@ -1,11 +1,22 @@
 import typer
 from typing import Optional, List
+from pathlib import Path
+import sys
 
-from .config.config import set_Config, reset_config
-from .misc.heading import clear_screen, show_welcome
-from .misc.console import console
-from .misc.analyzer_help import show_analyze_help
-from .ai.pr_analyzer import generate_report
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+    from promptgitx.config.config import set_Config, reset_config
+    from promptgitx.misc.heading import clear_screen, show_welcome
+    from promptgitx.misc.console import console
+    from promptgitx.misc.analyzer_help import show_analyze_help
+    from promptgitx.ai.pr_analyzer import generate_report
+else:
+    from .config.config import set_Config, reset_config
+    from .misc.heading import clear_screen, show_welcome
+    from .misc.console import console
+    from .misc.analyzer_help import show_analyze_help
+    from .ai.pr_analyzer import generate_report
 
 app = typer.Typer(
     name="PromptGitX",
