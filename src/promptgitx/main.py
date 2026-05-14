@@ -1,9 +1,11 @@
 import typer
-from typing import Optional
+from typing import Optional, List
 
-from config.config import set_Config, reset_config
-from misc.heading import clear_screen, show_welcome
-from misc.console import console
+from .config.config import set_Config, reset_config
+from .misc.heading import clear_screen, show_welcome
+from .misc.console import console
+from .misc.analyzer_help import show_analyze_help
+from .ai.pr_analyzer import generate_report
 
 app = typer.Typer(
     name="PromptGitX",
@@ -40,7 +42,7 @@ def analyze(
         "-c",
         help="Generate a review report for any Specific Commit.",
     ),
-    commits: Optional[str] = typer.Option(
+    commits: Optional[List[str]] = typer.Option(
         None,
         "--commits",
         "-C",
@@ -50,17 +52,24 @@ def analyze(
         None,
         "--compare",
         "-p",
-        help="Compare multiple branches/tags/commits",
+        help="Generate a review report by comparing multiple branches/tags/commits",
     ),
     pr: Optional[int] = typer.Option(
         None,
         "--pr",
+        "-P",
         help="Generate a review report for a Pull Request.",
     ),
-    last: Optional[int] = typer.Option(
-        1,
+    last: Optional[bool] = typer.Option(
+        None,
         "--last",
         "-l",
+        help="Generate a review report for the last Commit.",
+    ),
+    last_n: Optional[int] = typer.Option(
+        None,
+        "--last-n",
+        "-n",
         help="Generate a review report for the last n Commits.",
     ),
     staged: Optional[bool] = typer.Option(
@@ -71,9 +80,36 @@ def analyze(
     ),
 ):
     """
-    Generate a review report for the staged changes.
+    Generate a review report.
     """
-    console.print("Review report is running")
+    mode = ""
+    if commit:
+        mode = "commit"
+    elif commits:
+        mode = "commits"
+    elif compare:
+        mode = "compare"
+    elif pr:
+        mode = "pr"
+    elif last:
+        mode = "last"
+    elif last_n:
+        mode = "last_n"
+    elif staged:
+        mode = "staged"
+    else:
+        show_analyze_help()
+        return
+
+    generate_report(mode=mode,
+    commit=commit,
+    commits=commits,
+    compare=compare,
+    pr=pr,
+    last=last,
+    last_n=last_n,
+    staged=staged,
+    )
 
 
 

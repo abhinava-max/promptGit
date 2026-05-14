@@ -1,5 +1,5 @@
 from rich.text import Text
-from misc.console import console
+from ..misc.console import console
 
 
 STYLE_TITLE = "bold #c084fc"

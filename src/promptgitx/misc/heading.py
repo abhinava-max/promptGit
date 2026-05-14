@@ -2,7 +2,7 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.align import Align
 from pyfiglet import Figlet
-from misc.console import console
+from .console import console
 import os
 import sys
 

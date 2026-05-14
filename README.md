@@ -12,12 +12,14 @@ PromptGitX is an AI-powered Git commit assistant built as a Python CLI. It is in
 ## Project Structure
 
 ```text
+pyproject.toml          # PyPI/build metadata
 src/
-  main.py                 # CLI entry point
-  ai/
-    llm_providers.py      # LLM provider configuration helpers
-  misc/
-    heading.py            # Rich/figlet terminal UI helpers
+  promptgitx/
+    main.py              # CLI entry point
+    ai/                  # AI review/report helpers
+    config/              # LLM provider configuration helpers
+    gitcodes/            # Git diff and repository helpers
+    misc/                # Rich/figlet terminal UI helpers
 ```
 
 ## Setup
@@ -35,6 +37,12 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+For package-style local development:
+
+```bash
+pip install -e .
+```
+
 3. Create your environment file:
 
 ```bash
@@ -43,34 +51,34 @@ cp src/.env.example .env
 
 ## Usage
 
-Run the CLI directly from the project root:
+Run the CLI after installing locally:
 
 ```bash
-python src/main.py
+promptgitx
 ```
 
 View available commands:
 
 ```bash
-python src/main.py --help
+promptgitx --help
 ```
 
 Configure an LLM provider:
 
 ```bash
-python src/main.py config
+promptgitx config
 ```
 
 Start the chat command:
 
 ```bash
-python src/main.py chat
+promptgitx chat
 ```
 
 Generate a review report:
 
 ```bash
-python src/main.py review
+promptgitx analyze
 ```
 
 ## Configuration
