@@ -33,7 +33,43 @@ def chat():
 #                   Review Report Command
 # ----------------------------------------------------------------
 @app.command()
-def analyze():
+def analyze(
+    commit: Optional[str] = typer.Option(
+        None,
+        "--commit",
+        "-c",
+        help="Generate a review report for any Specific Commit.",
+    ),
+    commits: Optional[str] = typer.Option(
+        None,
+        "--commits",
+        "-C",
+        help="Generate a review report for Multiple Commits.",
+    ),
+    compare: Optional[str] = typer.Option(
+        None,
+        "--compare",
+        "-p",
+        help="Compare multiple branches/tags/commits",
+    ),
+    pr: Optional[int] = typer.Option(
+        None,
+        "--pr",
+        help="Generate a review report for a Pull Request.",
+    ),
+    last: Optional[int] = typer.Option(
+        1,
+        "--last",
+        "-l",
+        help="Generate a review report for the last n Commits.",
+    ),
+    staged: Optional[bool] = typer.Option(
+        None,
+        "--staged",
+        "-s",
+        help="Generate a review report for the Staged Changes.",
+    ),
+):
     """
     Generate a review report for the staged changes.
     """
@@ -76,7 +112,9 @@ def config(
         help="Reset configurations.",
     ),
 ):
-    console.print("Configuring PromptGitX")
+    """
+    Configure PromptGitX
+    """
     if reset:
         console.print("Resetting configurations")
         reset_config()
