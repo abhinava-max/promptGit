@@ -8,6 +8,8 @@ version = "0.5.0"
 description = "AI-powered Git commit assistant and PR analyzer."
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
 authors = [
     { name = "AbhinavA_04" }
 ]
@@ -31,6 +33,7 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -40,6 +43,11 @@ classifiers = [
 
 [project.scripts]
 promptgitx = "promptgitx.main:main"
+
+[project.urls]
+Homepage = "https://github.com/abhinava-max/promptGit"
+Issues = "https://github.com/abhinava-max/promptGit/issues"
+Source = "https://github.com/abhinava-max/promptGit"
 
 [tool.setuptools.packages.find]
 where = ["src"]
