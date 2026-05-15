@@ -5,7 +5,10 @@ build/
 dist/
 *.egg-info/
 *.pyc
+promptgitx-report-*
 
 */.env
 */venv
 */__pycache__
+
+info.txt
