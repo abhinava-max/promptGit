@@ -10,6 +10,88 @@ STYLE_SUCCESS = "bold #22c55e"
 STYLE_ERROR = "bold #fb7185"
 
 
+PROVIDERS = {
+    "1": {
+        "name": "GROQ",
+        "display": "Groq",
+        "type": "cloud",
+        "key_name": "GROQ_API_KEY",
+    },
+    "2": {
+        "name": "OPENAI",
+        "display": "OpenAI",
+        "type": "cloud",
+        "key_name": "OPENAI_API_KEY",
+    },
+    "3": {
+        "name": "ANTHROPIC",
+        "display": "Anthropic",
+        "type": "cloud",
+        "key_name": "ANTHROPIC_API_KEY",
+    },
+    "4": {
+        "name": "GEMINI",
+        "display": "Gemini",
+        "type": "cloud",
+        "key_name": "GEMINI_API_KEY",
+    },
+    "5": {
+        "name": "OLLAMA",
+        "display": "Ollama [Local]",
+        "type": "local",
+        "base_url_name": "OLLAMA_BASE_URL",
+    },
+}
+
+PROVIDER_ALIASES = {
+    "groq": "1",
+    "openai": "2",
+    "anthropic": "3",
+    "gemini": "4",
+    "ollama": "5",
+}
+
+
+def get_provider_by_value(provider_value: str | None):
+    if not provider_value:
+        return None
+
+    provider_key = provider_value.lower().strip()
+
+    if provider_key in PROVIDERS:
+        return PROVIDERS[provider_key]
+
+    if provider_key in PROVIDER_ALIASES:
+        return PROVIDERS[PROVIDER_ALIASES[provider_key]]
+
+    return None
+
+
+def read_env_file(env_path):
+    env_data = {}
+
+    if not env_path.exists():
+        return env_data
+
+    with env_path.open("r", encoding="utf-8") as file:
+        for line in file:
+            line = line.strip()
+
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            env_data[key.strip()] = value.strip()
+
+    return env_data
+
+
+def write_env_file(env_path, env_data):
+    with env_path.open("w", encoding="utf-8") as file:
+        for key, value in env_data.items():
+            file.write(f"{key}={value}\n")
+
+
 def print_error(message: str):
     console.print(message, style=STYLE_ERROR)
 
@@ -43,69 +125,11 @@ def set_Config(
 
     ENV_PATH = Path(".env")
 
-    PROVIDERS = {
-        "1": {
-            "name": "GROQ",
-            "display": "Groq",
-            "type": "cloud",
-            "key_name": "GROQ_API_KEY",
-        },
-        "2": {
-            "name": "OPENAI",
-            "display": "OpenAI",
-            "type": "cloud",
-            "key_name": "OPENAI_API_KEY",
-        },
-        "3": {
-            "name": "ANTHROPIC",
-            "display": "Anthropic",
-            "type": "cloud",
-            "key_name": "ANTHROPIC_API_KEY",
-        },
-        "4": {
-            "name": "GEMINI",
-            "display": "Gemini",
-            "type": "cloud",
-            "key_name": "GEMINI_API_KEY",
-        },
-        "5": {
-            "name": "OLLAMA",
-            "display": "Ollama [Local]",
-            "type": "local",
-            "base_url_name": "OLLAMA_BASE_URL",
-        },
-    }
-
-    PROVIDER_ALIASES = {
-        "groq": "1",
-        "openai": "2",
-        "anthropic": "3",
-        "gemini": "4",
-        "ollama": "5",
-    }
-
     def read_env():
-        env_data = {}
-
-        if not ENV_PATH.exists():
-            return env_data
-
-        with ENV_PATH.open("r", encoding="utf-8") as file:
-            for line in file:
-                line = line.strip()
-
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-
-                key, value = line.split("=", 1)
-                env_data[key.strip()] = value.strip()
-
-        return env_data
+        return read_env_file(ENV_PATH)
 
     def write_env(env_data):
-        with ENV_PATH.open("w", encoding="utf-8") as file:
-            for key, value in env_data.items():
-                file.write(f"{key}={value}\n")
+        write_env_file(ENV_PATH, env_data)
 
     def parse_models(model_string):
         parsed_models = [
@@ -146,17 +170,14 @@ def set_Config(
 
     def get_provider_choice(provider_value):
         if provider_value:
-            provider_key = provider_value.lower().strip()
+            selected_provider = get_provider_by_value(provider_value)
 
-            if provider_key in PROVIDERS:
-                return PROVIDERS[provider_key]
-
-            if provider_key not in PROVIDER_ALIASES:
+            if not selected_provider:
                 print_error("Invalid provider.")
                 print_info("Available providers: groq, openai, anthropic, gemini, ollama")
                 return None
 
-            return PROVIDERS[PROVIDER_ALIASES[provider_key]]
+            return selected_provider
 
         print_provider_menu(PROVIDERS)
 
@@ -249,3 +270,56 @@ def reset_config():
         ENV_PATH.unlink()
 
     print_success("Configuration reset successfully.")
+
+
+def switch_provider(provider: str):
+    from pathlib import Path
+
+    ENV_PATH = Path(".env")
+    selected_provider = get_provider_by_value(provider)
+
+    if not selected_provider:
+        print_error("Invalid provider.")
+        print_info("Available providers: groq, openai, anthropic, gemini, ollama")
+        return
+
+    env_data = read_env_file(ENV_PATH)
+    provider_name = selected_provider["name"]
+    model = env_data.get(f"{provider_name}_MODEL_1", "").strip()
+
+    if not model:
+        print_error(f"{selected_provider['display']} is not configured yet.")
+        print_info(
+            f"Run: promptgitx config --provider {provider_name.lower()} "
+            "--models <model-name>"
+        )
+        return
+
+    if selected_provider["type"] == "cloud":
+        api_key = env_data.get(selected_provider["key_name"], "").strip()
+
+        if not api_key:
+            print_error(f"{selected_provider['display']} API key is missing.")
+            print_info(
+                f"Run: promptgitx config --provider {provider_name.lower()} "
+                f"--models {model} --api-key <api-key>"
+            )
+            return
+
+    if selected_provider["type"] == "local":
+        base_url = env_data.get(selected_provider["base_url_name"], "").strip()
+
+        if not base_url:
+            print_error(f"{selected_provider['display']} base URL is missing.")
+            print_info(
+                f"Run: promptgitx config --provider {provider_name.lower()} "
+                f"--models {model} --base-url http://localhost:11434"
+            )
+            return
+
+    env_data["CURRENT_PROVIDER"] = provider_name
+    write_env_file(ENV_PATH, env_data)
+
+    print_success(f"Current provider switched to {provider_name}.")
+    console.print("Model: ", style=STYLE_MUTED, end="")
+    console.print(f"{provider_name} | {model}", style=STYLE_ACCENT)

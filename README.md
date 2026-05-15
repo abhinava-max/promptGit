@@ -162,6 +162,7 @@ Global options:
 | `--models` | `-m` | Comma-separated list of up to five model names. |
 | `--api-key` | none | API key for cloud providers. |
 | `--base-url` | none | Base URL for local providers like Ollama. |
+| `--use` | `-u` | Switch to an already configured provider. |
 | `--reset` | `-r` | Reset saved configuration. |
 
 `promptgitx analyze` target options:

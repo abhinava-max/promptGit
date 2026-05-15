@@ -7,13 +7,13 @@ import sys
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-    from promptgitx.config.config import set_Config, reset_config
+    from promptgitx.config.config import set_Config, reset_config, switch_provider
     from promptgitx.misc.heading import clear_screen, show_welcome
     from promptgitx.misc.console import console
     from promptgitx.misc.analyzer_help import show_analyze_help
     from promptgitx import __version__
 else:
-    from .config.config import set_Config, reset_config
+    from .config.config import set_Config, reset_config, switch_provider
     from .misc.heading import clear_screen, show_welcome
     from .misc.console import console
     from .misc.analyzer_help import show_analyze_help
@@ -241,6 +241,12 @@ def config(
         "--base-url",
         help="Base URL for local providers like Ollama.",
     ),
+    use: Optional[str] = typer.Option(
+        None,
+        "--use",
+        "-u",
+        help="Switch to an already configured provider.",
+    ),
     reset: Optional[bool] = typer.Option(
         None,
         "--reset",
@@ -256,6 +262,9 @@ def config(
     if reset:
         console.print("Resetting configurations")
         reset_config()
+        return
+    if use:
+        switch_provider(use)
         return
     else:
         set_Config(
