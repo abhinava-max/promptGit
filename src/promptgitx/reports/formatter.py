@@ -132,6 +132,9 @@ def format_issue_items(title: str, items: list[dict[str, Any]]) -> list[str]:
         suggestion = item.get("suggestion")
         lines.append(f"- {file_path}: {message}")
 
+        if item.get("line_reference"):
+            lines.append(f"  Reference: {item['line_reference']}")
+
         if suggestion and has_message:
             lines.append(f"  Suggestion: {suggestion}")
 
@@ -326,6 +329,11 @@ def render_issue_items(title: str, items: list[dict[str, Any]]) -> Text:
         text.append(": ")
         text.append(str(item.get("message") or item.get("suggestion") or "No details provided."))
 
+        if item.get("line_reference"):
+            text.append("\n  ")
+            append_label(text, "Reference: ")
+            text.append(str(item["line_reference"]))
+
         if item.get("suggestion") and item.get("message"):
             text.append("\n  ")
             append_label(text, "Suggestion: ")
@@ -376,6 +384,11 @@ def render_issue_group(title: str, items: list[dict[str, Any]], style: str = STY
         append_file(line, str(item.get("file_path", "unknown")))
         line.append(": ")
         line.append(str(item.get("message") or item.get("suggestion") or "No details provided."))
+
+        if item.get("line_reference"):
+            line.append("\n")
+            append_label(line, "Reference: ")
+            line.append(str(item["line_reference"]))
 
         if item.get("suggestion") and item.get("message"):
             line.append("\n")

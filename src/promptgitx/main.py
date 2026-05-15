@@ -37,8 +37,6 @@ def print_version(value: bool):
 
 
 def show_app_header():
-    console.print("[yellow]Please wait, PromptGitX is loading...[/yellow]")
-    asyncio.run(asyncio.sleep(2))
     clear_screen()
     show_welcome(model_name=get_current_model_display())
 
@@ -268,6 +266,8 @@ def config(
 #                    Main Function
 # ----------------------------------------------------------------
 def main():
+    console.print("[yellow]Please wait, PromptGitX is loading...[/yellow]")
+    asyncio.run(asyncio.sleep(2))
     app()
 
 if __name__ == "__main__":

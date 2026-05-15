@@ -256,6 +256,12 @@ def add_issue_section(document: Document, title: str, items: list[dict[str, Any]
             suggestion.paragraph_format.left_indent = Inches(0.25)
             add_colored_run(suggestion, "Suggestion: ", COLOR_MUTED, bold=True)
             add_colored_run(suggestion, str(item["suggestion"]), COLOR_DARK)
+
+        if item.get("line_reference"):
+            reference = cell.add_paragraph()
+            reference.paragraph_format.left_indent = Inches(0.25)
+            add_colored_run(reference, "Reference: ", COLOR_MUTED, bold=True)
+            add_colored_run(reference, str(item["line_reference"]), COLOR_DARK)
         document.add_paragraph()
 
 
