@@ -16,6 +16,7 @@ from .diff_parser import (
     parse_diff,
     summarize_diff,
     chunk_diff_by_file,
+    split_large_diff_chunks,
     filter_large_diff_chunks,
     get_changed_file_paths,
 )

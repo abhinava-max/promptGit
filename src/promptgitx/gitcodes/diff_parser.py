@@ -227,40 +227,113 @@ def chunk_diff_by_file(diff_text: str) -> list[dict]:
     for file in parsed.files:
         chunks.append({
             "file_path": file.file_path,
+            "parent_file_path": file.file_path,
             "added_lines_count": len(file.added_lines),
             "removed_lines_count": len(file.removed_lines),
+            "parent_added_lines_count": len(file.added_lines),
+            "parent_removed_lines_count": len(file.removed_lines),
             "changed_lines": file.changed_lines,
+            "chunk_part": 1,
+            "chunk_total": 1,
+            "was_split": False,
             "raw_diff": file.raw_diff,
         })
 
     return chunks
 
 
-def filter_large_diff_chunks(
-    chunks: list[dict],
-    max_chars: int = 12000,
-) -> list[dict]:
+def split_file_diff_by_hunks(raw_diff: str) -> tuple[str, list[str]]:
+    hunk_matches = list(re.finditer(r"^@@ .*$", raw_diff, flags=re.MULTILINE))
+
+    if not hunk_matches:
+        return raw_diff, []
+
+    header = raw_diff[:hunk_matches[0].start()].strip()
+    hunks = []
+
+    for index, match in enumerate(hunk_matches):
+        start = match.start()
+        end = hunk_matches[index + 1].start() if index + 1 < len(hunk_matches) else len(raw_diff)
+        hunks.append(raw_diff[start:end].strip())
+
+    return header, hunks
+
+
+def build_review_subchunk(parent_chunk: dict, raw_diff: str, part: int, total: int) -> dict:
+    parsed = parse_file_diff(raw_diff)
+
+    return {
+        **parent_chunk,
+        "added_lines_count": len(parsed.added_lines) if parsed else 0,
+        "removed_lines_count": len(parsed.removed_lines) if parsed else 0,
+        "changed_lines": parsed.changed_lines if parsed else [],
+        "chunk_part": part,
+        "chunk_total": total,
+        "was_split": total > 1,
+        "raw_diff": raw_diff,
+    }
+
+
+def split_large_diff_chunks(chunks: list[dict], max_chars: int = 12000) -> list[dict]:
     """
-    Trims very large file diffs so they don't exceed LLM context too much.
+    Splits oversized file diffs into hunk-based subchunks without dropping diff data.
     """
 
-    filtered_chunks = []
+    split_chunks = []
 
     for chunk in chunks:
         raw_diff = chunk["raw_diff"]
 
-        if len(raw_diff) > max_chars:
-            chunk = {
+        if len(raw_diff) <= max_chars:
+            split_chunks.append({
                 **chunk,
-                "raw_diff": raw_diff[:max_chars],
-                "was_trimmed": True,
-            }
-        else:
-            chunk = {
-                **chunk,
+                "chunk_part": 1,
+                "chunk_total": 1,
+                "was_split": False,
                 "was_trimmed": False,
-            }
+            })
+            continue
 
-        filtered_chunks.append(chunk)
+        header, hunks = split_file_diff_by_hunks(raw_diff)
 
-    return filtered_chunks
+        if not hunks:
+            split_chunks.append({
+                **chunk,
+                "chunk_part": 1,
+                "chunk_total": 1,
+                "was_split": False,
+                "was_trimmed": False,
+            })
+            continue
+
+        grouped_hunks: list[list[str]] = []
+        current_group: list[str] = []
+
+        for hunk in hunks:
+            candidate_group = current_group + [hunk]
+            candidate_raw_diff = "\n".join([header, *candidate_group]).strip()
+
+            if current_group and len(candidate_raw_diff) > max_chars:
+                grouped_hunks.append(current_group)
+                current_group = [hunk]
+            else:
+                current_group = candidate_group
+
+        if current_group:
+            grouped_hunks.append(current_group)
+
+        total = len(grouped_hunks)
+
+        for index, group in enumerate(grouped_hunks, start=1):
+            subchunk_raw_diff = "\n".join([header, *group]).strip()
+            split_chunks.append(build_review_subchunk(chunk, subchunk_raw_diff, index, total))
+
+    return split_chunks
+
+
+def filter_large_diff_chunks(chunks: list[dict], max_chars: int = 12000) -> list[dict]:
+    """
+    Backward-compatible alias. Large diffs are now split instead of trimmed.
+    """
+
+    return split_large_diff_chunks(chunks, max_chars=max_chars)
