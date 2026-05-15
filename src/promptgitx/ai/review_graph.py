@@ -7,7 +7,7 @@ from langgraph.graph import END, START, StateGraph
 
 from .graph_state import ReviewGraphState
 from .json_utils import extract_json_object, to_pretty_json
-from .llm_provider import create_chat_model_with_fallbacks, get_current_model_display
+from .llm_provider import RuntimeModelRouter, get_current_model_display
 from .report_builder import build_report, normalize_file_review
 from ..gitcodes.diff_fetcher import (
     get_commit_diff,
@@ -20,7 +20,7 @@ from ..gitcodes.diff_fetcher import (
 )
 from ..gitcodes.diff_parser import (
     chunk_diff_by_file,
-    filter_large_diff_chunks,
+    split_large_diff_chunks,
     summarize_diff,
 )
 from ..gitcodes.git_info import get_current_branch, get_repo_root
@@ -101,10 +101,7 @@ def load_diff_node(state: ReviewGraphState) -> ReviewGraphState:
 def parse_diff_node(state: ReviewGraphState) -> ReviewGraphState:
     diff = state.get("diff", "")
     summary = summarize_diff(diff)
-    chunks = filter_large_diff_chunks(
-        chunk_diff_by_file(diff),
-        max_chars=MAX_CHUNK_CHARS,
-    )
+    chunks = chunk_diff_by_file(diff)
 
     return {
         "diff_summary": summary,
@@ -112,32 +109,88 @@ def parse_diff_node(state: ReviewGraphState) -> ReviewGraphState:
     }
 
 
+def split_large_chunks_node(state: ReviewGraphState) -> ReviewGraphState:
+    review_chunks = split_large_diff_chunks(
+        state.get("chunks", []),
+        max_chars=MAX_CHUNK_CHARS,
+    )
+
+    return {
+        "review_chunks": review_chunks,
+    }
+
+
 def review_chunks_node(state: ReviewGraphState) -> ReviewGraphState:
-    chunks = state.get("chunks", [])
+    chunks = state.get("review_chunks", [])
 
     if not chunks:
         return {
             "chunk_reviews": [],
-            "file_reviews": [],
         }
 
-    chain = get_chunk_review_prompt() | create_chat_model_with_fallbacks() | StrOutputParser()
+    prompt = get_chunk_review_prompt()
+    model_router = RuntimeModelRouter()
     chunk_reviews = []
-    file_reviews = []
 
     for index, chunk in enumerate(chunks, start=1):
+        prompt_input = {
+            "mode": state["mode"],
+            "repo_context": state.get("repo_context", ""),
+            "file_path": chunk.get("file_path", "unknown"),
+            "chunk_part": chunk.get("chunk_part", 1),
+            "chunk_total": chunk.get("chunk_total", 1),
+            "added_lines_count": chunk.get("added_lines_count", 0),
+            "removed_lines_count": chunk.get("removed_lines_count", 0),
+            "numbered_changed_lines": format_numbered_changed_lines(chunk),
+            "raw_diff": chunk.get("raw_diff", ""),
+        }
+
         try:
-            raw_review = chain.invoke(
-                {
-                    "mode": state["mode"],
-                    "repo_context": state.get("repo_context", ""),
-                    "file_path": chunk.get("file_path", "unknown"),
-                    "added_lines_count": chunk.get("added_lines_count", 0),
-                    "removed_lines_count": chunk.get("removed_lines_count", 0),
-                    "numbered_changed_lines": format_numbered_changed_lines(chunk),
-                    "raw_diff": chunk.get("raw_diff", ""),
-                }
-            )
+            active_model = model_router.current_model
+            chain = prompt | model_router.create_current_chat_model() | StrOutputParser()
+            raw_review = chain.invoke(prompt_input)
+        except Exception as error:
+            while model_router.has_next_model():
+                active_model = model_router.advance_model()
+                chain = prompt | model_router.create_current_chat_model() | StrOutputParser()
+
+                try:
+                    raw_review = chain.invoke(prompt_input)
+                    break
+                except Exception as retry_error:
+                    error = retry_error
+            else:
+                file_review = normalize_file_review(
+                    {
+                        "file_path": chunk.get("file_path", "unknown"),
+                        "summary": "AI review failed for this file.",
+                        "issues": [
+                            {
+                                "category": "maintainability",
+                                "severity": "medium",
+                                "line_reference": "changed block",
+                                "message": f"AI review failed using all configured models: {error}",
+                                "suggestion": "Run the review again or inspect this file manually.",
+                            }
+                        ],
+                    },
+                    chunk,
+                )
+                chunk_reviews.append(
+                    {
+                        "chunk": index,
+                        "file_path": file_review["file_path"],
+                        "chunk_part": chunk.get("chunk_part", 1),
+                        "chunk_total": chunk.get("chunk_total", 1),
+                        "parent_added_lines": chunk.get("parent_added_lines_count", file_review["added_lines"]),
+                        "parent_removed_lines": chunk.get("parent_removed_lines_count", file_review["removed_lines"]),
+                        "model": active_model.display_name,
+                        "review": file_review,
+                    }
+                )
+                continue
+
+        try:
             parsed_review = extract_json_object(raw_review)
             file_review = normalize_file_review(parsed_review, chunk)
         except Exception as error:
@@ -158,17 +211,76 @@ def review_chunks_node(state: ReviewGraphState) -> ReviewGraphState:
                 chunk,
             )
 
-        file_reviews.append(file_review)
         chunk_reviews.append(
             {
                 "chunk": index,
                 "file_path": file_review["file_path"],
+                "chunk_part": chunk.get("chunk_part", 1),
+                "chunk_total": chunk.get("chunk_total", 1),
+                "parent_added_lines": chunk.get("parent_added_lines_count", file_review["added_lines"]),
+                "parent_removed_lines": chunk.get("parent_removed_lines_count", file_review["removed_lines"]),
+                "model": active_model.display_name,
                 "review": file_review,
             }
         )
 
     return {
         "chunk_reviews": chunk_reviews,
+    }
+
+
+def merge_file_reviews_node(state: ReviewGraphState) -> ReviewGraphState:
+    grouped_reviews: dict[str, dict] = {}
+
+    for chunk_review in state.get("chunk_reviews", []):
+        review = chunk_review.get("review", {})
+        file_path = str(chunk_review.get("file_path") or review.get("file_path", "unknown"))
+
+        if file_path not in grouped_reviews:
+            grouped_reviews[file_path] = {
+                "file_path": file_path,
+                "summary_parts": [],
+                "added_lines": int(chunk_review.get("parent_added_lines", review.get("added_lines", 0))),
+                "removed_lines": int(chunk_review.get("parent_removed_lines", review.get("removed_lines", 0))),
+                "issues": [],
+                "chunk_total": int(chunk_review.get("chunk_total", 1)),
+            }
+
+        summary = str(review.get("summary", "")).strip()
+
+        if summary and summary not in grouped_reviews[file_path]["summary_parts"]:
+            grouped_reviews[file_path]["summary_parts"].append(summary)
+
+        grouped_reviews[file_path]["issues"].extend(review.get("issues", []))
+        grouped_reviews[file_path]["chunk_total"] = max(
+            grouped_reviews[file_path]["chunk_total"],
+            int(chunk_review.get("chunk_total", 1)),
+        )
+
+    file_reviews = []
+
+    for grouped in grouped_reviews.values():
+        summary_parts = grouped.pop("summary_parts")
+        chunk_total = grouped.pop("chunk_total")
+
+        if not summary_parts:
+            summary = ""
+        elif chunk_total > 1:
+            summary = f"Reviewed in {chunk_total} parts. " + " ".join(summary_parts)
+        else:
+            summary = summary_parts[0]
+
+        file_reviews.append(
+            {
+                "file_path": grouped["file_path"],
+                "summary": summary,
+                "added_lines": grouped["added_lines"],
+                "removed_lines": grouped["removed_lines"],
+                "issues": grouped["issues"],
+            }
+        )
+
+    return {
         "file_reviews": file_reviews,
     }
 
@@ -189,13 +301,17 @@ def create_review_graph():
     graph = StateGraph(ReviewGraphState)
     graph.add_node("load_diff", load_diff_node)
     graph.add_node("parse_diff", parse_diff_node)
+    graph.add_node("split_large_chunks", split_large_chunks_node)
     graph.add_node("review_chunks", review_chunks_node)
+    graph.add_node("merge_file_reviews", merge_file_reviews_node)
     graph.add_node("final_report", final_report_node)
 
     graph.add_edge(START, "load_diff")
     graph.add_edge("load_diff", "parse_diff")
-    graph.add_edge("parse_diff", "review_chunks")
-    graph.add_edge("review_chunks", "final_report")
+    graph.add_edge("parse_diff", "split_large_chunks")
+    graph.add_edge("split_large_chunks", "review_chunks")
+    graph.add_edge("review_chunks", "merge_file_reviews")
+    graph.add_edge("merge_file_reviews", "final_report")
     graph.add_edge("final_report", END)
 
     return graph.compile()

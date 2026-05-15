@@ -58,6 +58,39 @@ class LLMConfig:
         return self.models[0] if self.models else None
 
 
+class RuntimeModelRouter:
+    def __init__(self, *, temperature: float = 0, **kwargs: Any):
+        self.config = get_active_llm_config()
+
+        if not self.config.models:
+            raise RuntimeError("No LLM provider is configured. Run `promptgitx config` first.")
+
+        self.temperature = temperature
+        self.kwargs = kwargs
+        self.model_index = 0
+
+    @property
+    def current_model(self) -> ModelSpec:
+        return self.config.models[self.model_index]
+
+    def has_next_model(self) -> bool:
+        return self.model_index + 1 < len(self.config.models)
+
+    def advance_model(self) -> ModelSpec:
+        if not self.has_next_model():
+            raise RuntimeError("All configured LLM models failed for this review run.")
+
+        self.model_index += 1
+        return self.current_model
+
+    def create_current_chat_model(self):
+        return create_chat_model(
+            self.current_model,
+            temperature=self.temperature,
+            **self.kwargs,
+        )
+
+
 def read_env(env_path: Path = ENV_PATH) -> dict[str, str]:
     env_data: dict[str, str] = {}
 

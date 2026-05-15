@@ -61,6 +61,9 @@ Repository context:
 File path:
 {file_path}
 
+Chunk:
+Part {chunk_part} of {chunk_total} for this file
+
 Added lines:
 {added_lines_count}
 

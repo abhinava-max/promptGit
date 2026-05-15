@@ -16,6 +16,7 @@ class ReviewGraphState(TypedDict, total=False):
     diff: str
     diff_summary: dict[str, Any]
     chunks: list[dict[str, Any]]
+    review_chunks: list[dict[str, Any]]
     chunk_reviews: list[dict[str, Any]]
     file_reviews: list[dict[str, Any]]
     report: dict[str, Any]
