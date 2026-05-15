@@ -2,7 +2,6 @@ import typer
 from typing import Optional, List
 from pathlib import Path
 import sys
-import asyncio
 
 
 if __package__ in (None, ""):
@@ -12,16 +11,12 @@ if __package__ in (None, ""):
     from promptgitx.misc.heading import clear_screen, show_welcome
     from promptgitx.misc.console import console
     from promptgitx.misc.analyzer_help import show_analyze_help
-    from promptgitx.ai.pr_analyzer import generate_report
-    from promptgitx.ai.llm_provider import get_current_model_display
     from promptgitx import __version__
 else:
     from .config.config import set_Config, reset_config
     from .misc.heading import clear_screen, show_welcome
     from .misc.console import console
     from .misc.analyzer_help import show_analyze_help
-    from .ai.pr_analyzer import generate_report
-    from .ai.llm_provider import get_current_model_display
     from . import __version__
 
 app = typer.Typer(
@@ -37,8 +32,15 @@ def print_version(value: bool):
 
 
 def show_app_header():
+    from promptgitx.ai.llm_provider import get_current_model_display
+
     clear_screen()
     show_welcome(model_name=get_current_model_display())
+
+
+def should_show_loading_message() -> bool:
+    quiet_options = {"--json", "--version", "--help", "-h"}
+    return not any(option in quiet_options for option in sys.argv[1:])
 
 
 def get_analyze_mode(
@@ -193,17 +195,20 @@ def analyze(
     if not output_json:
         show_app_header()
 
-    generate_report(mode=mode,
-    commit=commit,
-    commits=commits,
-    compare=compare,
-    pr=pr,
-    last=last,
-    last_n=last_n,
-    staged=staged,
-    output_json=bool(output_json),
-    summary_only=bool(summary),
-    save_path=save,
+    from promptgitx.ai.pr_analyzer import generate_report
+
+    generate_report(
+        mode=mode,
+        commit=commit,
+        commits=commits,
+        compare=compare,
+        pr=pr,
+        last=last,
+        last_n=last_n,
+        staged=staged,
+        output_json=bool(output_json),
+        summary_only=bool(summary),
+        save_path=save,
     )
 
 
@@ -266,8 +271,9 @@ def config(
 #                    Main Function
 # ----------------------------------------------------------------
 def main():
-    console.print("[yellow]Please wait, PromptGitX is loading...[/yellow]")
-    asyncio.run(asyncio.sleep(2))
+    if should_show_loading_message():
+        console.print("[yellow]Please wait, PromptGitX is loading...[/yellow]")
+
     app()
 
 if __name__ == "__main__":
