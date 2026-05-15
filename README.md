@@ -140,6 +140,45 @@ If `--save` is not passed, PromptGitX asks whether you want to save the report a
 Use only one review target per command, such as `--last` or `--staged`, not both.
 `--json` prints raw JSON without the welcome banner so it can be used in scripts.
 
+## CLI Option Reference
+
+Global options:
+
+| Long option | Short option | Description |
+| --- | --- | --- |
+| `--version` | none | Show the installed PromptGitX version and exit. |
+| `--help` | none | Show CLI help. |
+
+`promptgitx config` options:
+
+| Long option | Short option | Description |
+| --- | --- | --- |
+| `--provider` | `-p` | LLM provider to configure: `groq`, `openai`, `anthropic`, `gemini`, or `ollama`. |
+| `--models` | `-m` | Comma-separated list of up to five model names. |
+| `--api-key` | none | API key for cloud providers. |
+| `--base-url` | none | Base URL for local providers like Ollama. |
+| `--reset` | `-r` | Reset saved configuration. |
+
+`promptgitx analyze` target options:
+
+| Long option | Short option | Description |
+| --- | --- | --- |
+| `--commit` | `-c` | Review one specific commit. |
+| `--commits` | `-C` | Review multiple commits. Can be provided more than once. |
+| `--compare` | `-p` | Review a comparison such as `main..feature-branch`. |
+| `--pr` | `-P` | Review a GitHub pull request by number. Requires GitHub CLI. |
+| `--last` | `-l` | Review the latest commit. |
+| `--last-n` | `-n` | Review the last N commits. |
+| `--staged` | `-s` | Review staged changes. |
+
+`promptgitx analyze` output options:
+
+| Long option | Short option | Description |
+| --- | --- | --- |
+| `--json` | none | Print the raw structured JSON report. |
+| `--summary` | none | Print only the short review summary. |
+| `--save` | none | Save the report to `.txt`, `.json`, `.docx`, or `.pdf`. |
+
 ## Configuration
 
 PromptGitX supports the following providers:
