@@ -7,7 +7,11 @@ PromptGitX is an AI-powered Git commit assistant built as a Python CLI. It is in
 - Interactive CLI built with Typer
 - Rich terminal welcome screen
 - LLM provider configuration for Groq, OpenAI, Anthropic, Gemini, and Ollama
-- Placeholder commands for chat-based commit message generation and review reports
+- AI review reports for commits, commit ranges, pull requests, and staged changes
+- LangGraph-based review workflow
+- Hunk-based splitting for large file diffs instead of silent trimming
+- Verified changed-line references from Git diff hunks
+- Terminal, JSON, TXT, DOCX, and PDF report output
 
 ## Project Structure
 
@@ -198,17 +202,33 @@ The welcome screen displays the active model as:
 Model: <PROVIDER> | <MODEL_NAME>
 ```
 
-PromptGitX uses the first configured model for the active provider first, then prepares the remaining configured models as fallbacks for later LangGraph/agent workflows.
+PromptGitX uses the first configured model for the active provider first. During one analyze run, if a model call fails, PromptGitX advances to the next configured model and keeps using that model for later chunks in the same run.
 
 ## Analyze Workflow
 
 The `analyze` command uses a LangGraph workflow:
 
 ```text
-load_diff -> parse_diff -> review_chunks -> final_report
+load_diff
+  -> parse_diff
+  -> split_large_chunks
+  -> review_chunks
+  -> merge_file_reviews
+  -> final_report
 ```
 
-It reuses the existing Git helpers to collect diffs, parses and chunks the diff, reviews each chunk with the configured LLM, then synthesizes a final report. The first configured model is used first; additional configured models are attached as fallbacks.
+Workflow details:
+
+- `load_diff` collects the requested Git diff using `git` or `gh`.
+- `parse_diff` converts the raw diff into file-level chunks and computes changed-line references from diff hunk headers.
+- `split_large_chunks` splits oversized file chunks into hunk-based review chunks without dropping diff data.
+- `review_chunks` sends each review chunk to the configured LLM and validates returned references.
+- `merge_file_reviews` combines subchunk reviews back into one review per file.
+- `final_report` builds the structured report with risk, recommendation, grouped issues, and output-ready data.
+
+Large diffs are split by hunks instead of being cut at an arbitrary character limit. If a single hunk is very large, PromptGitX keeps that hunk intact to avoid corrupting line references.
+
+The final report is mostly built by deterministic Python logic. The LLM reviews individual chunks; Python then normalizes issues, validates references, merges file reviews, calculates risk, and formats the final outputs.
 
 ## Build For Upload
 
@@ -226,4 +246,4 @@ dist/
 
 ## Status
 
-This project is in early development. The CLI structure and provider configuration flow are in place, while the chat and review commands are currently placeholders.
+This project is in early development. The review report workflow is functional, including saved TXT, JSON, DOCX, and PDF outputs. The chat command is still a placeholder.
