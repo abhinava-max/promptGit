@@ -286,6 +286,16 @@ def issue_section(title: str, items: list[dict[str, Any]], story: list, styles: 
                 ]
             )
 
+        if item.get("line_reference"):
+            rows.append(
+                [
+                    paragraph(
+                        f"<font color='#64748B'><b>Reference:</b></font> {escape_text(item['line_reference'])}",
+                        styles["small"],
+                    )
+                ]
+            )
+
         table = Table(rows, colWidths=[6.6 * inch])
         table.setStyle(
             TableStyle(

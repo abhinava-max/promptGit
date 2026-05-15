@@ -8,6 +8,7 @@ class FileDiff:
     old_file_path: str | None = None
     added_lines: list[str] = field(default_factory=list)
     removed_lines: list[str] = field(default_factory=list)
+    changed_lines: list[dict] = field(default_factory=list)
     raw_diff: str = ""
 
 
@@ -85,22 +86,63 @@ def parse_file_diff(file_diff_text: str) -> FileDiff | None:
 
     added_lines: list[str] = []
     removed_lines: list[str] = []
+    changed_lines: list[dict] = []
+    old_line_number: int | None = None
+    new_line_number: int | None = None
 
     for line in file_diff_text.splitlines():
+        hunk_match = re.match(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@", line)
+
+        if hunk_match:
+            old_line_number = int(hunk_match.group(1))
+            new_line_number = int(hunk_match.group(2))
+            continue
+
         if line.startswith("+++") or line.startswith("---"):
             continue
 
         if line.startswith("+"):
-            added_lines.append(line[1:])
+            content = line[1:]
+            added_lines.append(content)
+
+            if new_line_number is not None:
+                changed_lines.append(
+                    {
+                        "kind": "added",
+                        "line_number": new_line_number,
+                        "reference": f"{file_path}:L{new_line_number}",
+                        "content": content,
+                    }
+                )
+                new_line_number += 1
 
         elif line.startswith("-"):
-            removed_lines.append(line[1:])
+            content = line[1:]
+            removed_lines.append(content)
+
+            if old_line_number is not None:
+                changed_lines.append(
+                    {
+                        "kind": "removed",
+                        "line_number": old_line_number,
+                        "reference": f"{file_path}:old L{old_line_number}",
+                        "content": content,
+                    }
+                )
+                old_line_number += 1
+
+        elif line.startswith(" "):
+            if old_line_number is not None:
+                old_line_number += 1
+            if new_line_number is not None:
+                new_line_number += 1
 
     return FileDiff(
         file_path=file_path,
         old_file_path=old_file_path,
         added_lines=added_lines,
         removed_lines=removed_lines,
+        changed_lines=changed_lines,
         raw_diff=file_diff_text,
     )
 
@@ -187,6 +229,7 @@ def chunk_diff_by_file(diff_text: str) -> list[dict]:
             "file_path": file.file_path,
             "added_lines_count": len(file.added_lines),
             "removed_lines_count": len(file.removed_lines),
+            "changed_lines": file.changed_lines,
             "raw_diff": file.raw_diff,
         })
 
