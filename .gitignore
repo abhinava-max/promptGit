@@ -10,3 +10,5 @@ promptgitx-report-*
 */.env
 */venv
 */__pycache__
+
+info.txt
