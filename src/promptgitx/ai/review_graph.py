@@ -7,7 +7,7 @@ from langgraph.graph import END, START, StateGraph
 
 from .graph_state import ReviewGraphState
 from .json_utils import extract_json_object, to_pretty_json
-from .llm_provider import create_chat_model_with_fallbacks, get_current_model_display
+from .llm_provider import RuntimeModelRouter, get_current_model_display
 from .report_builder import build_report, normalize_file_review
 from ..gitcodes.diff_fetcher import (
     get_commit_diff,
@@ -121,23 +121,65 @@ def review_chunks_node(state: ReviewGraphState) -> ReviewGraphState:
             "file_reviews": [],
         }
 
-    chain = get_chunk_review_prompt() | create_chat_model_with_fallbacks() | StrOutputParser()
+    prompt = get_chunk_review_prompt()
+    model_router = RuntimeModelRouter()
     chunk_reviews = []
     file_reviews = []
 
     for index, chunk in enumerate(chunks, start=1):
+        prompt_input = {
+            "mode": state["mode"],
+            "repo_context": state.get("repo_context", ""),
+            "file_path": chunk.get("file_path", "unknown"),
+            "added_lines_count": chunk.get("added_lines_count", 0),
+            "removed_lines_count": chunk.get("removed_lines_count", 0),
+            "numbered_changed_lines": format_numbered_changed_lines(chunk),
+            "raw_diff": chunk.get("raw_diff", ""),
+        }
+
         try:
-            raw_review = chain.invoke(
-                {
-                    "mode": state["mode"],
-                    "repo_context": state.get("repo_context", ""),
-                    "file_path": chunk.get("file_path", "unknown"),
-                    "added_lines_count": chunk.get("added_lines_count", 0),
-                    "removed_lines_count": chunk.get("removed_lines_count", 0),
-                    "numbered_changed_lines": format_numbered_changed_lines(chunk),
-                    "raw_diff": chunk.get("raw_diff", ""),
-                }
-            )
+            active_model = model_router.current_model
+            chain = prompt | model_router.create_current_chat_model() | StrOutputParser()
+            raw_review = chain.invoke(prompt_input)
+        except Exception as error:
+            while model_router.has_next_model():
+                active_model = model_router.advance_model()
+                chain = prompt | model_router.create_current_chat_model() | StrOutputParser()
+
+                try:
+                    raw_review = chain.invoke(prompt_input)
+                    break
+                except Exception as retry_error:
+                    error = retry_error
+            else:
+                file_review = normalize_file_review(
+                    {
+                        "file_path": chunk.get("file_path", "unknown"),
+                        "summary": "AI review failed for this file.",
+                        "issues": [
+                            {
+                                "category": "maintainability",
+                                "severity": "medium",
+                                "line_reference": "changed block",
+                                "message": f"AI review failed using all configured models: {error}",
+                                "suggestion": "Run the review again or inspect this file manually.",
+                            }
+                        ],
+                    },
+                    chunk,
+                )
+                file_reviews.append(file_review)
+                chunk_reviews.append(
+                    {
+                        "chunk": index,
+                        "file_path": file_review["file_path"],
+                        "model": active_model.display_name,
+                        "review": file_review,
+                    }
+                )
+                continue
+
+        try:
             parsed_review = extract_json_object(raw_review)
             file_review = normalize_file_review(parsed_review, chunk)
         except Exception as error:
@@ -163,6 +205,7 @@ def review_chunks_node(state: ReviewGraphState) -> ReviewGraphState:
             {
                 "chunk": index,
                 "file_path": file_review["file_path"],
+                "model": active_model.display_name,
                 "review": file_review,
             }
         )
