@@ -64,10 +64,10 @@ def maybe_prompt_save(report: dict):
     if answer not in {"y", "yes"}:
         return
 
-    report_format = console.input("Format (json, txt, docx): ").strip().lower()
+    report_format = console.input("Format (json, txt, docx, pdf): ").strip().lower()
 
-    if report_format not in {"txt", "json", "docx"}:
-        console.print("Invalid format. Use json, txt, or docx.", style="bold #fb7185")
+    if report_format not in {"txt", "json", "docx", "pdf"}:
+        console.print("Invalid format. Use json, txt, docx, or pdf.", style="bold #fb7185")
         return
 
     try:

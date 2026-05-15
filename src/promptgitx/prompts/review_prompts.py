@@ -25,6 +25,8 @@ Important rules:
 - Review only the provided diff.
 - Do not assume files that are not shown.
 - Do not invent issues.
+- Use only the exact references from "Numbered changed lines" for line_reference.
+- If no exact numbered line applies, use "changed block".
 - If something needs human review, clearly mention it.
 - Be concise and practical.
 - Focus on changed code.
@@ -65,6 +67,9 @@ Added lines:
 Removed lines:
 {removed_lines_count}
 
+Numbered changed lines:
+{numbered_changed_lines}
+
 Git diff:
 {raw_diff}
 
@@ -77,7 +82,7 @@ Return exactly this JSON shape:
     {{
       "category": "bug | breaking_change | security | performance | code_quality | vulgarity | standards | testing | documentation | maintainability",
       "severity": "low | medium | high | critical",
-      "line_reference": "line, function, or changed block if known",
+      "line_reference": "exact reference from Numbered changed lines, or changed block",
       "message": "clear explanation of the issue",
       "suggestion": "specific improvement suggestion"
     }}

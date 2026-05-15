@@ -28,6 +28,27 @@ from ..prompts import get_chunk_review_prompt
 
 
 MAX_CHUNK_CHARS = 12000
+MAX_NUMBERED_CHANGED_LINES = 120
+
+
+def format_numbered_changed_lines(chunk: dict) -> str:
+    changed_lines = chunk.get("changed_lines", [])
+
+    if not changed_lines:
+        return "No exact changed line references were parsed. Use changed block."
+
+    lines = []
+
+    for item in changed_lines[:MAX_NUMBERED_CHANGED_LINES]:
+        prefix = "+" if item.get("kind") == "added" else "-"
+        lines.append(f"{item.get('reference')}: {prefix} {item.get('content', '')}")
+
+    remaining = len(changed_lines) - len(lines)
+
+    if remaining > 0:
+        lines.append(f"... {remaining} more changed line(s) omitted. Use changed block for omitted lines.")
+
+    return "\n".join(lines)
 
 
 def get_repo_context() -> str:
@@ -113,6 +134,7 @@ def review_chunks_node(state: ReviewGraphState) -> ReviewGraphState:
                     "file_path": chunk.get("file_path", "unknown"),
                     "added_lines_count": chunk.get("added_lines_count", 0),
                     "removed_lines_count": chunk.get("removed_lines_count", 0),
+                    "numbered_changed_lines": format_numbered_changed_lines(chunk),
                     "raw_diff": chunk.get("raw_diff", ""),
                 }
             )

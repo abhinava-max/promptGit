@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -44,7 +45,72 @@ def build_target(state: dict[str, Any]) -> dict[str, Any]:
     return {"mode": mode, "value": value}
 
 
-def normalize_issue(issue: dict[str, Any]) -> dict[str, str]:
+def compact_line_reference(file_path: str, prefix: str, line_numbers: list[int]) -> str:
+    unique_numbers = sorted(set(line_numbers))
+
+    if not unique_numbers:
+        return "changed block"
+
+    label = "old L" if prefix == "old" else "L"
+
+    if len(unique_numbers) == 1:
+        return f"{file_path}:{label}{unique_numbers[0]}"
+
+    if unique_numbers == list(range(unique_numbers[0], unique_numbers[-1] + 1)):
+        return f"{file_path}:{label}{unique_numbers[0]}-{label}{unique_numbers[-1]}"
+
+    return ", ".join(f"{file_path}:{label}{line_number}" for line_number in unique_numbers[:3])
+
+
+def normalize_line_reference(reference: Any, chunk: dict[str, Any]) -> str:
+    reference_text = str(reference or "").strip()
+    changed_lines = chunk.get("changed_lines", [])
+
+    if not reference_text or reference_text.lower() in {"changed block", "unknown", "n/a", "none"}:
+        return "changed block"
+
+    valid_references = {
+        str(item.get("reference", "")).strip()
+        for item in changed_lines
+        if item.get("reference")
+    }
+
+    if reference_text in valid_references:
+        return reference_text
+
+    file_path = str(chunk.get("file_path", "unknown"))
+    new_lines = {
+        int(item["line_number"])
+        for item in changed_lines
+        if item.get("kind") == "added" and item.get("line_number") is not None
+    }
+    old_lines = {
+        int(item["line_number"])
+        for item in changed_lines
+        if item.get("kind") == "removed" and item.get("line_number") is not None
+    }
+    reference_numbers = [int(match) for match in re.findall(r"(?:line\s*|L)(\d+)", reference_text, flags=re.IGNORECASE)]
+
+    if not reference_numbers:
+        return "changed block"
+
+    is_old_reference = "old" in reference_text.lower() or "removed" in reference_text.lower()
+    matching_old_lines = [line_number for line_number in reference_numbers if line_number in old_lines]
+    matching_new_lines = [line_number for line_number in reference_numbers if line_number in new_lines]
+
+    if is_old_reference and matching_old_lines:
+        return compact_line_reference(file_path, "old", matching_old_lines)
+
+    if matching_new_lines:
+        return compact_line_reference(file_path, "new", matching_new_lines)
+
+    if matching_old_lines:
+        return compact_line_reference(file_path, "old", matching_old_lines)
+
+    return "changed block"
+
+
+def normalize_issue(issue: dict[str, Any], chunk: dict[str, Any]) -> dict[str, str]:
     category = str(issue.get("category", "maintainability")).strip().lower()
     severity = str(issue.get("severity", "medium")).strip().lower()
 
@@ -57,7 +123,7 @@ def normalize_issue(issue: dict[str, Any]) -> dict[str, str]:
     return {
         "category": category,
         "severity": severity,
-        "line_reference": str(issue.get("line_reference", "changed block")).strip(),
+        "line_reference": normalize_line_reference(issue.get("line_reference", "changed block"), chunk),
         "message": str(issue.get("message", "")).strip(),
         "suggestion": str(issue.get("suggestion", "")).strip(),
     }
@@ -78,7 +144,7 @@ def normalize_file_review(
         "added_lines": int(chunk.get("added_lines_count", 0)),
         "removed_lines": int(chunk.get("removed_lines_count", 0)),
         "issues": [
-            normalize_issue(issue)
+            normalize_issue(issue, chunk)
             for issue in raw_issues
             if isinstance(issue, dict) and str(issue.get("message", "")).strip()
         ],
@@ -88,6 +154,7 @@ def normalize_file_review(
 def issue_item(file_path: str, issue: dict[str, str]) -> dict[str, str]:
     return {
         "file_path": file_path,
+        "line_reference": issue["line_reference"],
         "message": issue["message"],
         "suggestion": issue["suggestion"],
     }
@@ -178,6 +245,7 @@ def build_report(
                 issues["improvements"].append(
                     {
                         "file_path": file_path,
+                        "line_reference": issue["line_reference"],
                         "suggestion": issue["suggestion"],
                     }
                 )

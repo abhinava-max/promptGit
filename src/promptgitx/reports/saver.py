@@ -9,9 +9,10 @@ from typing import Any
 from ..ai.json_utils import to_pretty_json
 from .docx_writer import create_docx_report
 from .formatter import format_terminal_report
+from .pdf_writer import create_pdf_report
 
 
-SUPPORTED_FORMATS = {"txt", "json", "docx"}
+SUPPORTED_FORMATS = {"txt", "json", "docx", "pdf"}
 
 
 def default_report_path(report_format: str) -> Path:
@@ -25,7 +26,7 @@ def infer_report_format(path: Path) -> str:
     if suffix in SUPPORTED_FORMATS:
         return suffix
 
-    raise ValueError("Only .txt, .json, and .docx report formats are supported for now.")
+    raise ValueError("Only .txt, .json, .docx, and .pdf report formats are supported for now.")
 
 
 def save_report(
@@ -37,7 +38,7 @@ def save_report(
         report_format = report_format.lower().strip()
 
         if report_format not in SUPPORTED_FORMATS:
-            raise ValueError("Only txt, json, and docx report formats are supported for now.")
+            raise ValueError("Only txt, json, docx, and pdf report formats are supported for now.")
 
     if path is None:
         if report_format is None:
@@ -55,6 +56,10 @@ def save_report(
 
     if report_format == "docx":
         create_docx_report(report, output_path)
+        return output_path
+
+    if report_format == "pdf":
+        create_pdf_report(report, output_path)
         return output_path
 
     if report_format == "json":
