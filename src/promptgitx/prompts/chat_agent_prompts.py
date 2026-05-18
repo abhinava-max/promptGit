@@ -14,7 +14,7 @@ promptgitx_query: user asks about PromptGitX usage, commands, features, reports,
 out_of_scope: anything else.
 
 Return JSON Only:
-{"intent": "...", "reason": "..."}
+{{"intent": "...", "reason": "..."}}
 """
 
 CHAT_GIT_GITHUB_QA_PROMPT = """
@@ -39,7 +39,22 @@ PromptGitX help context:
 {help_context}
 """.strip()
 
-def get_chat_help_prompt() -> ChatPromptTemplate:
+def get_chat_intent_prompt() -> ChatPromptTemplate:
+    return ChatPromptTemplate.from_messages(
+        [
+            ("system", CLASSIFIER_PROMPT),
+            ("human", "{user_input}"),
+        ]
+    )
+
+def get_git_github_question_prompt() -> ChatPromptTemplate:
+    return ChatPromptTemplate.from_messages(
+        [
+            ("system", CHAT_GIT_GITHUB_QA_PROMPT),
+            ("human", "{user_input}"),
+        ]
+    )
+def get_promptgitx_help_prompt() -> ChatPromptTemplate:
     return ChatPromptTemplate.from_messages(
         [
             ("system", CHAT_PROMPTGITX_ASSISTANT_SYSTEM_PROMPT),

@@ -26,6 +26,8 @@ class ReviewGraphState(TypedDict, total=False):
 class ChatGraphState(TypedDict, total=False):
     user_input: str
     help_context: str
+    promptgitx_app: Any
     intent: str
+    intent_reason: str
     response: str
     refusal_reason: str
