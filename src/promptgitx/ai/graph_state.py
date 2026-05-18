@@ -22,3 +22,10 @@ class ReviewGraphState(TypedDict, total=False):
     report: dict[str, Any]
     final_report: str
     model_name: str
+
+class ChatGraphState(TypedDict, total=False):
+    user_input: str
+    help_context: str
+    intent: str
+    response: str
+    refusal_reason: str

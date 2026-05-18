@@ -8,6 +8,7 @@ from .llm_provider import (
 )
 from .review_graph import create_review_graph, run_review_graph
 from .chat_agent import run_help_chat
+
 __all__ = [
     "create_chat_model",
     "create_chat_model_with_fallbacks",
@@ -15,5 +16,5 @@ __all__ = [
     "get_current_model_display",
     "create_review_graph",
     "run_review_graph",
-    "get_chat_help_prompt",
+    "run_help_chat",
 ]
