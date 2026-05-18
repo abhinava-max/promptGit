@@ -101,7 +101,7 @@ def callback(
 @app.command()
 def chat():
     """
-    Start the AI chat interface to generate Git commit messages.
+    Start the AI chat interface to generate commit messages, review reports and more.
     """
     show_app_header()
     console.print("Chat is running")

@@ -26,7 +26,7 @@ Important rules:
 - Do not assume files that are not shown.
 - Do not invent issues.
 - Use only the exact references from "Numbered changed lines" for line_reference.
-- If no exact numbered line applies, use "changed block".
+- If no exact numbered line applies, use "file-level".
 - If something needs human review, clearly mention it.
 - Be concise and practical.
 - Focus on changed code.
@@ -85,7 +85,7 @@ Return exactly this JSON shape:
     {{
       "category": "bug | breaking_change | security | performance | code_quality | vulgarity | standards | testing | documentation | maintainability",
       "severity": "low | medium | high | critical",
-      "line_reference": "exact reference from Numbered changed lines, or changed block",
+      "line_reference": "exact reference from Numbered changed lines, or file-level",
       "message": "clear explanation of the issue",
       "suggestion": "specific improvement suggestion"
     }}
@@ -142,6 +142,61 @@ Return JSON only.
 """.strip()
 
 
+REPORT_REFINEMENT_SYSTEM_PROMPT = """
+You are GitPromptX, an expert AI code review editor.
+
+Your task is to refine an already generated structured review report.
+
+Rules:
+- Do not invent new files or findings.
+- Merge findings that are semantically the same, even if they mention different
+  nearby lines.
+- Keep distinct issues separate when they have different root causes.
+- Preserve useful line references by combining them when merged.
+- Prefer the highest severity when merging findings.
+- Prefer the most specific category when merging findings.
+- Write concise short_message values for grouped category sections.
+- Keep message values clear enough for detailed file-wise sections.
+- Return valid JSON only.
+""".strip()
+
+
+REPORT_REFINEMENT_USER_PROMPT = """
+Refine this report JSON.
+
+Input report:
+{report_json}
+
+Return exactly this JSON shape:
+
+{{
+  "overall_summary": "one sentence summary of the review result",
+  "end_summary": "short final paragraph with the main risks and recommended next action",
+  "files": [
+    {{
+      "file_path": "path/to/file",
+      "summary": "short file summary"
+    }}
+  ],
+  "findings": [
+    {{
+      "source_ids": ["PGX-001"],
+      "file_path": "path/to/file",
+      "category": "bug | breaking_change | security | performance | code_quality | vulgarity | standards | testing | documentation | maintainability",
+      "severity": "low | medium | high | critical",
+      "line_reference": "combined useful refs from source findings",
+      "short_message": "short grouped-section bullet",
+      "message": "clear detailed problem statement",
+      "suggestion": "specific improvement suggestion"
+    }}
+  ]
+}}
+
+If there are no findings, return an empty findings array.
+Return JSON only.
+""".strip()
+
+
 def get_chunk_review_prompt() -> ChatPromptTemplate:
     return ChatPromptTemplate.from_messages(
         [
@@ -156,5 +211,14 @@ def get_final_review_prompt() -> ChatPromptTemplate:
         [
             ("system", FINAL_REVIEW_SYSTEM_PROMPT),
             ("human", FINAL_REVIEW_USER_PROMPT),
+        ]
+    )
+
+
+def get_report_refinement_prompt() -> ChatPromptTemplate:
+    return ChatPromptTemplate.from_messages(
+        [
+            ("system", REPORT_REFINEMENT_SYSTEM_PROMPT),
+            ("human", REPORT_REFINEMENT_USER_PROMPT),
         ]
     )
