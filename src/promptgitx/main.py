@@ -17,6 +17,7 @@ else:
     from .misc.heading import clear_screen, show_welcome
     from .misc.console import console
     from .misc.analyzer_help import show_analyze_help
+    from .ai.chat_agent import run_help_chat
     from . import __version__
 
 app = typer.Typer(
@@ -104,7 +105,7 @@ def chat():
     Start the AI chat interface to generate commit messages, review reports and more.
     """
     show_app_header()
-    console.print("Chat is running")
+    run_help_chat()
 
 
 
