@@ -12,3 +12,5 @@ promptgitx-report-*
 */__pycache__
 
 info.txt
+
+.DS_Store

@@ -8,7 +8,7 @@ from langgraph.graph import END, START, StateGraph
 from .graph_state import ReviewGraphState
 from .json_utils import extract_json_object, to_pretty_json
 from .llm_provider import RuntimeModelRouter, get_current_model_display
-from .report_builder import build_report, normalize_file_review
+from .report_builder import apply_refined_report, build_report, normalize_file_review
 from ..gitcodes.diff_fetcher import (
     get_commit_diff,
     get_compare_diff,
@@ -24,7 +24,7 @@ from ..gitcodes.diff_parser import (
     summarize_diff,
 )
 from ..gitcodes.git_info import get_current_branch, get_repo_root
-from ..prompts import get_chunk_review_prompt
+from ..prompts import get_chunk_review_prompt, get_report_refinement_prompt
 
 
 MAX_CHUNK_CHARS = 12000
@@ -35,7 +35,7 @@ def format_numbered_changed_lines(chunk: dict) -> str:
     changed_lines = chunk.get("changed_lines", [])
 
     if not changed_lines:
-        return "No exact changed line references were parsed. Use changed block."
+        return "No exact changed line references were parsed. Use file-level."
 
     lines = []
 
@@ -46,7 +46,7 @@ def format_numbered_changed_lines(chunk: dict) -> str:
     remaining = len(changed_lines) - len(lines)
 
     if remaining > 0:
-        lines.append(f"... {remaining} more changed line(s) omitted. Use changed block for omitted lines.")
+        lines.append(f"... {remaining} more changed line(s) omitted. Use file-level for omitted lines.")
 
     return "\n".join(lines)
 
@@ -168,7 +168,7 @@ def review_chunks_node(state: ReviewGraphState) -> ReviewGraphState:
                             {
                                 "category": "maintainability",
                                 "severity": "medium",
-                                "line_reference": "changed block",
+                                "line_reference": "file-level",
                                 "message": f"AI review failed using all configured models: {error}",
                                 "suggestion": "Run the review again or inspect this file manually.",
                             }
@@ -297,6 +297,62 @@ def final_report_node(state: ReviewGraphState) -> ReviewGraphState:
     }
 
 
+def refine_report_node(state: ReviewGraphState) -> ReviewGraphState:
+    report = state.get("report", {})
+
+    if not report:
+        return {}
+
+    prompt = get_report_refinement_prompt()
+    model_router = RuntimeModelRouter()
+    prompt_input = {
+        "report_json": to_pretty_json(report),
+    }
+
+    try:
+        active_model = model_router.current_model
+        chain = prompt | model_router.create_current_chat_model() | StrOutputParser()
+        raw_refined_report = chain.invoke(prompt_input)
+    except Exception as error:
+        while model_router.has_next_model():
+            active_model = model_router.advance_model()
+            chain = prompt | model_router.create_current_chat_model() | StrOutputParser()
+
+            try:
+                raw_refined_report = chain.invoke(prompt_input)
+                break
+            except Exception as retry_error:
+                error = retry_error
+        else:
+            return {
+                "report": {
+                    **report,
+                    "refinement_error": f"Final report refinement failed using all configured models: {error}",
+                },
+                "final_report": to_pretty_json(
+                    {
+                        **report,
+                        "refinement_error": f"Final report refinement failed using all configured models: {error}",
+                    }
+                ),
+            }
+
+    try:
+        parsed_refined_report = extract_json_object(raw_refined_report)
+        refined_report = apply_refined_report(report, parsed_refined_report)
+        refined_report["refined_by_model"] = active_model.display_name
+    except Exception as error:
+        refined_report = {
+            **report,
+            "refinement_error": f"Final report refinement output could not be parsed: {error}",
+        }
+
+    return {
+        "report": refined_report,
+        "final_report": to_pretty_json(refined_report),
+    }
+
+
 def create_review_graph():
     graph = StateGraph(ReviewGraphState)
     graph.add_node("load_diff", load_diff_node)
@@ -305,6 +361,7 @@ def create_review_graph():
     graph.add_node("review_chunks", review_chunks_node)
     graph.add_node("merge_file_reviews", merge_file_reviews_node)
     graph.add_node("final_report", final_report_node)
+    graph.add_node("refine_report", refine_report_node)
 
     graph.add_edge(START, "load_diff")
     graph.add_edge("load_diff", "parse_diff")
@@ -312,7 +369,8 @@ def create_review_graph():
     graph.add_edge("split_large_chunks", "review_chunks")
     graph.add_edge("review_chunks", "merge_file_reviews")
     graph.add_edge("merge_file_reviews", "final_report")
-    graph.add_edge("final_report", END)
+    graph.add_edge("final_report", "refine_report")
+    graph.add_edge("refine_report", END)
 
     return graph.compile()
 

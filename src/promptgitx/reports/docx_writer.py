@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,87 @@ COLOR_CARD_BG = "FBFCFE"
 COLOR_SEVERITY_MEDIUM_BG = "FEF3C7"
 COLOR_SEVERITY_HIGH_BG = "FEE2E2"
 COLOR_SEVERITY_LOW_BG = "EAF7EF"
+
+
+def findings_by_id(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        str(finding.get("id")): finding
+        for finding in report.get("findings", [])
+        if finding.get("id")
+    }
+
+
+def resolve_issue_items(report: dict[str, Any], items: list[Any]) -> list[dict[str, Any]]:
+    lookup = findings_by_id(report)
+    resolved = []
+
+    for item in items:
+        if isinstance(item, str):
+            finding = lookup.get(item)
+
+            if finding:
+                resolved.append(finding)
+        elif isinstance(item, dict):
+            resolved.append(item)
+
+    return resolved
+
+
+def get_file_issues(report: dict[str, Any], file: dict[str, Any]) -> list[dict[str, Any]]:
+    if file.get("issues"):
+        return file.get("issues", [])
+
+    return resolve_issue_items(report, file.get("issue_ids", []))
+
+
+def group_items_by_file(items: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+
+    for item in items:
+        file_path = str(item.get("file_path", "unknown"))
+        grouped.setdefault(file_path, []).append(item)
+
+    return grouped
+
+
+def issue_message(item: dict[str, Any]) -> str:
+    return str(item.get("short_message") or item.get("message") or item.get("suggestion") or "No details provided.")
+
+
+def issue_ids_text(items: list[dict[str, Any]]) -> str:
+    issue_ids = [str(item["id"]) for item in items if item.get("id")]
+
+    if not issue_ids:
+        return ""
+
+    return ", ".join(issue_ids)
+
+
+def format_line_reference(reference: Any) -> str:
+    reference_text = str(reference or "").strip()
+
+    if not reference_text:
+        return ""
+
+    lowered = reference_text.lower()
+
+    if "changed file" in lowered:
+        return "Changed file"
+
+    line_matches = re.findall(r"(?:old\s+)?L(\d+)(?:-(?:old\s+)?L?(\d+))?", reference_text)
+
+    if not line_matches:
+        return reference_text
+
+    formatted = []
+
+    for start, end in line_matches:
+        if end:
+            formatted.append(f"Line {start}:{end}")
+        else:
+            formatted.append(f"Line {start}")
+
+    return ", ".join(formatted)
 
 
 def set_cell_shading(cell, fill: str):
@@ -198,7 +280,7 @@ def add_executive_summary(document: Document, report: dict[str, Any]):
     summary = report.get("summary", {})
     recommendation = summary.get("final_recommendation", "APPROVE")
     risk = summary.get("risk_level", "low")
-    issue_count = sum(len(file.get("issues", [])) for file in report.get("files", []))
+    issue_count = len(report.get("findings", [])) or sum(len(file.get("issues", [])) for file in report.get("files", []))
 
     add_heading(document, "Executive Summary", level=1)
     table = document.add_table(rows=0, cols=1)
@@ -234,7 +316,7 @@ def add_issue_section(document: Document, title: str, items: list[dict[str, Any]
 
     add_heading(document, title, level=2)
 
-    for item in items:
+    for file_path, file_items in group_items_by_file(items).items():
         table = document.add_table(rows=0, cols=1)
         table.style = "Table Grid"
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -243,34 +325,38 @@ def add_issue_section(document: Document, title: str, items: list[dict[str, Any]
         set_cell_border(cell, COLOR_CARD_BORDER)
         set_cell_shading(cell, COLOR_CARD_BG)
         paragraph = cell.paragraphs[0]
-        add_colored_run(paragraph, str(item.get("file_path", "unknown")), COLOR_FILE, bold=True)
-        add_colored_run(paragraph, ": ", COLOR_MUTED)
-        add_colored_run(
-            paragraph,
-            str(item.get("message") or item.get("suggestion") or "No details provided."),
-            COLOR_DARK,
-        )
+        add_colored_run(paragraph, file_path, COLOR_FILE, bold=True)
 
-        if item.get("suggestion") and item.get("message"):
-            suggestion = cell.add_paragraph()
-            suggestion.paragraph_format.left_indent = Inches(0.25)
-            add_colored_run(suggestion, "Suggestion: ", COLOR_MUTED, bold=True)
-            add_colored_run(suggestion, str(item["suggestion"]), COLOR_DARK)
+        for item in file_items:
+            issue = cell.add_paragraph()
+            issue.paragraph_format.left_indent = Inches(0.25)
+            add_colored_run(issue, "- ", COLOR_MUTED, bold=True)
+            add_colored_run(issue, issue_message(item), COLOR_DARK)
 
-        if item.get("line_reference"):
-            reference = cell.add_paragraph()
-            reference.paragraph_format.left_indent = Inches(0.25)
-            add_colored_run(reference, "Reference: ", COLOR_MUTED, bold=True)
-            add_colored_run(reference, str(item["line_reference"]), COLOR_DARK)
+            if item.get("line_reference"):
+                reference = cell.add_paragraph()
+                reference.paragraph_format.left_indent = Inches(0.45)
+                add_colored_run(reference, "refs: ", COLOR_MUTED, bold=True)
+                add_colored_run(reference, format_line_reference(item["line_reference"]), COLOR_DARK)
+
+        ids = issue_ids_text(file_items)
+
+        if ids:
+            id_line = cell.add_paragraph()
+            id_line.paragraph_format.left_indent = Inches(0.25)
+            add_colored_run(id_line, "- ids: ", COLOR_MUTED, bold=True)
+            add_colored_run(id_line, ids, COLOR_DARK)
+
         document.add_paragraph()
 
 
-def add_file_wise_issues(document: Document, files: list[dict[str, Any]]):
+def add_file_wise_issues(document: Document, report: dict[str, Any]):
     add_heading(document, "File-wise Issues", level=2)
+    files = report.get("files", [])
     found_issue = False
 
     for file in files:
-        for issue in file.get("issues", []):
+        for issue in get_file_issues(report, file):
             found_issue = True
             table = document.add_table(rows=0, cols=1)
             table.style = "Table Grid"
@@ -280,6 +366,8 @@ def add_file_wise_issues(document: Document, files: list[dict[str, Any]]):
             set_cell_border(cell, COLOR_CARD_BORDER)
             paragraph = cell.paragraphs[0]
             severity = str(issue.get("severity", "low")).upper()
+            if issue.get("id"):
+                add_colored_run(paragraph, f"{issue['id']}  ", COLOR_MUTED, bold=True)
             add_colored_run(paragraph, f"{severity}  ", severity_color(severity), bold=True)
             add_colored_run(paragraph, title_case(issue.get("category")), COLOR_NAVY, bold=True)
             set_cell_shading(cell, severity_background(severity))
@@ -287,7 +375,7 @@ def add_file_wise_issues(document: Document, files: list[dict[str, Any]]):
             details = [
                 ("File", file.get("file_path", "unknown")),
                 ("Problem", issue.get("message", "No details provided.")),
-                ("Reference", issue.get("line_reference", "changed block")),
+                ("Reference", format_line_reference(issue.get("line_reference", ""))),
                 ("Suggestion", issue.get("suggestion", "")),
             ]
 
@@ -384,14 +472,17 @@ def create_docx_report(report: dict[str, Any], output_path: Path) -> None:
 
     issues = report.get("issues", {})
     add_clean_checks(document, issues)
-    add_issue_section(document, "Critical Issues", issues.get("critical", []))
-    add_issue_section(document, "Breaking Changes", issues.get("breaking_changes", []))
-    add_issue_section(document, "Security Concerns", issues.get("security", []))
-    add_issue_section(document, "Code Quality Issues", issues.get("code_quality", []))
-    add_issue_section(document, "Unprofessional Language", issues.get("vulgarity", []))
-    add_issue_section(document, "Performance Issues", issues.get("performance", []))
-    add_issue_section(document, "Improvement Suggestions", issues.get("improvements", []))
-    add_file_wise_issues(document, report.get("files", []))
+    add_issue_section(document, "Critical Issues", resolve_issue_items(report, issues.get("critical", [])))
+    add_issue_section(document, "Breaking Changes", resolve_issue_items(report, issues.get("breaking_changes", [])))
+    add_issue_section(document, "Security Concerns", resolve_issue_items(report, issues.get("security", [])))
+    add_issue_section(document, "Code Quality Issues", resolve_issue_items(report, issues.get("code_quality", [])))
+    add_issue_section(document, "Testing Issues", resolve_issue_items(report, issues.get("testing", [])))
+    add_issue_section(document, "Documentation Issues", resolve_issue_items(report, issues.get("documentation", [])))
+    add_issue_section(document, "Maintainability Issues", resolve_issue_items(report, issues.get("maintainability", [])))
+    add_issue_section(document, "Unprofessional Language", resolve_issue_items(report, issues.get("vulgarity", [])))
+    add_issue_section(document, "Performance Issues", resolve_issue_items(report, issues.get("performance", [])))
+    add_issue_section(document, "Improvement Suggestions", resolve_issue_items(report, issues.get("improvements", [])))
+    add_file_wise_issues(document, report)
 
     add_heading(document, "Final Recommendation", level=1)
     paragraph = document.add_paragraph()
@@ -399,6 +490,11 @@ def create_docx_report(report: dict[str, Any], output_path: Path) -> None:
     reason = document.add_paragraph()
     add_colored_run(reason, "Reason: ", COLOR_MUTED, bold=True)
     add_colored_run(reason, str(report.get("overall_summary", "No summary available.")), COLOR_DARK)
+
+    if report.get("end_summary"):
+        final_summary = document.add_paragraph()
+        add_colored_run(final_summary, "Summary: ", COLOR_MUTED, bold=True)
+        add_colored_run(final_summary, str(report["end_summary"]), COLOR_DARK)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     document.save(output_path)

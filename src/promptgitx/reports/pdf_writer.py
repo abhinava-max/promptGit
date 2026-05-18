@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,87 @@ CARD_BORDER = colors.HexColor("#D7DEE8")
 SEVERITY_LOW_BG = colors.HexColor("#EAF7EF")
 SEVERITY_MEDIUM_BG = colors.HexColor("#FEF3C7")
 SEVERITY_HIGH_BG = colors.HexColor("#FEE2E2")
+
+
+def findings_by_id(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        str(finding.get("id")): finding
+        for finding in report.get("findings", [])
+        if finding.get("id")
+    }
+
+
+def resolve_issue_items(report: dict[str, Any], items: list[Any]) -> list[dict[str, Any]]:
+    lookup = findings_by_id(report)
+    resolved = []
+
+    for item in items:
+        if isinstance(item, str):
+            finding = lookup.get(item)
+
+            if finding:
+                resolved.append(finding)
+        elif isinstance(item, dict):
+            resolved.append(item)
+
+    return resolved
+
+
+def get_file_issues(report: dict[str, Any], file: dict[str, Any]) -> list[dict[str, Any]]:
+    if file.get("issues"):
+        return file.get("issues", [])
+
+    return resolve_issue_items(report, file.get("issue_ids", []))
+
+
+def group_items_by_file(items: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+
+    for item in items:
+        file_path = str(item.get("file_path", "unknown"))
+        grouped.setdefault(file_path, []).append(item)
+
+    return grouped
+
+
+def issue_message(item: dict[str, Any]) -> str:
+    return str(item.get("short_message") or item.get("message") or item.get("suggestion") or "No details provided.")
+
+
+def issue_ids_text(items: list[dict[str, Any]]) -> str:
+    issue_ids = [str(item["id"]) for item in items if item.get("id")]
+
+    if not issue_ids:
+        return ""
+
+    return ", ".join(issue_ids)
+
+
+def format_line_reference(reference: Any) -> str:
+    reference_text = str(reference or "").strip()
+
+    if not reference_text:
+        return ""
+
+    lowered = reference_text.lower()
+
+    if "changed file" in lowered:
+        return "Changed file"
+
+    line_matches = re.findall(r"(?:old\s+)?L(\d+)(?:-(?:old\s+)?L?(\d+))?", reference_text)
+
+    if not line_matches:
+        return reference_text
+
+    formatted = []
+
+    for start, end in line_matches:
+        if end:
+            formatted.append(f"Line {start}:{end}")
+        else:
+            formatted.append(f"Line {start}")
+
+    return ", ".join(formatted)
 
 
 def title_case(value: str | None) -> str:
@@ -217,7 +299,7 @@ def executive_summary(report: dict[str, Any], styles: dict[str, ParagraphStyle])
     summary = report.get("summary", {})
     recommendation = summary.get("final_recommendation", "APPROVE")
     risk = summary.get("risk_level", "low")
-    issue_count = sum(len(file.get("issues", [])) for file in report.get("files", []))
+    issue_count = len(report.get("findings", [])) or sum(len(file.get("issues", [])) for file in report.get("files", []))
     risk_hex = severity_color(risk).hexval()[2:]
     recommendation_hex = recommendation_color(recommendation).hexval()[2:]
     rows = [
@@ -264,33 +346,43 @@ def issue_section(title: str, items: list[dict[str, Any]], story: list, styles: 
 
     story.append(section_title(title, styles))
 
-    for item in items:
+    for file_path, file_items in group_items_by_file(items).items():
         rows = [
             [
                 paragraph(
-                    f"<font color='#475569'><b>{escape_text(item.get('file_path', 'unknown'))}</b></font>"
-                    f"<font color='#64748B'>: </font>"
-                    f"{escape_text(item.get('message') or item.get('suggestion') or 'No details provided.')}",
+                    f"<font color='#475569'><b>{escape_text(file_path)}</b></font>",
                     styles["normal"],
                 )
             ]
         ]
 
-        if item.get("suggestion") and item.get("message"):
+        for item in file_items:
             rows.append(
                 [
                     paragraph(
-                        f"<font color='#64748B'><b>Suggestion:</b></font> {escape_text(item['suggestion'])}",
+                        f"<font color='#64748B'><b>-</b></font> {escape_text(issue_message(item))}",
                         styles["small"],
                     )
                 ]
             )
 
-        if item.get("line_reference"):
+            if item.get("line_reference"):
+                rows.append(
+                    [
+                        paragraph(
+                            f"<font color='#64748B'><b>refs:</b></font> {escape_text(format_line_reference(item['line_reference']))}",
+                            styles["small"],
+                        )
+                    ]
+                )
+
+        ids = issue_ids_text(file_items)
+
+        if ids:
             rows.append(
                 [
                     paragraph(
-                        f"<font color='#64748B'><b>Reference:</b></font> {escape_text(item['line_reference'])}",
+                        f"<font color='#64748B'><b>- ids:</b></font> {escape_text(ids)}",
                         styles["small"],
                     )
                 ]
@@ -331,18 +423,21 @@ def clean_checks(issues: dict[str, list[dict[str, Any]]], styles: dict[str, Para
     return paragraph(text, styles["normal"])
 
 
-def file_wise_issues(files: list[dict[str, Any]], story: list, styles: dict[str, ParagraphStyle]):
+def file_wise_issues(report: dict[str, Any], story: list, styles: dict[str, ParagraphStyle]):
     story.append(section_title("File-wise Issues", styles))
+    files = report.get("files", [])
     found = False
 
     for file in files:
-        for issue in file.get("issues", []):
+        for issue in get_file_issues(report, file):
             found = True
             severity = str(issue.get("severity", "low")).upper()
             color = severity_color(severity)
             rows = [
                 [
                     paragraph(
+                        f"<font color='#64748B'><b>{escape_text(issue.get('id', ''))}</b></font>"
+                        f"{' ' if issue.get('id') else ''}"
                         f"<font color='#{color.hexval()[2:]}'><b>{severity}</b></font> "
                         f"<font color='#1E3A5F'><b>{escape_text(title_case(issue.get('category')))}</b></font>",
                         styles["normal"],
@@ -365,7 +460,7 @@ def file_wise_issues(files: list[dict[str, Any]], story: list, styles: dict[str,
             ]
 
             if issue.get("line_reference"):
-                rows.append([paragraph(f"<font color='#64748B'><b>Reference:</b></font> {escape_text(issue['line_reference'])}", styles["normal"])])
+                rows.append([paragraph(f"<font color='#64748B'><b>Reference:</b></font> {escape_text(format_line_reference(issue['line_reference']))}", styles["normal"])])
 
             if issue.get("suggestion"):
                 rows.append([paragraph(f"<font color='#64748B'><b>Suggestion:</b></font> {escape_text(issue['suggestion'])}", styles["normal"])])
@@ -457,14 +552,17 @@ def create_pdf_report(report: dict[str, Any], output_path: Path) -> None:
     issues = report.get("issues", {})
     story.append(section_title("Clean Checks", styles))
     story.append(clean_checks(issues, styles))
-    issue_section("Critical Issues", issues.get("critical", []), story, styles)
-    issue_section("Breaking Changes", issues.get("breaking_changes", []), story, styles)
-    issue_section("Security Concerns", issues.get("security", []), story, styles)
-    issue_section("Code Quality Issues", issues.get("code_quality", []), story, styles)
-    issue_section("Unprofessional Language", issues.get("vulgarity", []), story, styles)
-    issue_section("Performance Issues", issues.get("performance", []), story, styles)
-    issue_section("Improvement Suggestions", issues.get("improvements", []), story, styles)
-    file_wise_issues(report.get("files", []), story, styles)
+    issue_section("Critical Issues", resolve_issue_items(report, issues.get("critical", [])), story, styles)
+    issue_section("Breaking Changes", resolve_issue_items(report, issues.get("breaking_changes", [])), story, styles)
+    issue_section("Security Concerns", resolve_issue_items(report, issues.get("security", [])), story, styles)
+    issue_section("Code Quality Issues", resolve_issue_items(report, issues.get("code_quality", [])), story, styles)
+    issue_section("Testing Issues", resolve_issue_items(report, issues.get("testing", [])), story, styles)
+    issue_section("Documentation Issues", resolve_issue_items(report, issues.get("documentation", [])), story, styles)
+    issue_section("Maintainability Issues", resolve_issue_items(report, issues.get("maintainability", [])), story, styles)
+    issue_section("Unprofessional Language", resolve_issue_items(report, issues.get("vulgarity", [])), story, styles)
+    issue_section("Performance Issues", resolve_issue_items(report, issues.get("performance", [])), story, styles)
+    issue_section("Improvement Suggestions", resolve_issue_items(report, issues.get("improvements", [])), story, styles)
+    file_wise_issues(report, story, styles)
 
     story.append(section_title("Final Recommendation", styles))
     story.append(
@@ -474,5 +572,8 @@ def create_pdf_report(report: dict[str, Any], output_path: Path) -> None:
         )
     )
     story.append(paragraph(f"<font color='#64748B'><b>Reason:</b></font> {escape_text(report.get('overall_summary', 'No summary available.'))}", styles["normal"]))
+
+    if report.get("end_summary"):
+        story.append(paragraph(f"<font color='#64748B'><b>Summary:</b></font> {escape_text(report['end_summary'])}", styles["normal"]))
 
     document.build(story, onFirstPage=draw_page_number, onLaterPages=draw_page_number)
