@@ -28,7 +28,7 @@ def get_gradient_text(text: str) -> Text:
     figlet = Figlet(font="big")
     big_text = figlet.renderText(text)
 
-    # Blue → Purple → Pink
+    # Orange-pink-purple-blue
     colors = [
     "#f97316",
     "#fb7185",
@@ -65,29 +65,33 @@ def get_gradient_text(text: str) -> Text:
 def show_welcome(model_name: str | None = None):
     heading = get_gradient_text("PromptGitX")
 
-    subtitle = Text("AI-powered Git commit assistant", style="bold #a78bfa")
-    model_text = Text()
-    model_text.append("Model: ", style="#64748b")
-    model_text.append(model_name or "Not configured", style="bold #818cf8")
+    subtitle = Text("AI-powered Git Assistant", style="bold #c084fc")
+    subtitle.append(" | ", style="#64748b")
+    subtitle.append("Model: ", style="#64748b")
+    subtitle.append(model_name or "Not configured", style="bold #818cf8")
     description = Text(
-        "Generate clean, meaningful, and professional Git commit messages.",
+        "Analyze & Generate Reports | Git & GitHub Workflow | AI Chat",
         style="#94a3b8",
     )
 
     help_text = Text()
     help_text.append("Run ", style="#64748b")
-    help_text.append("promptgitx --help", style="bold cyan")
+    help_text.append("promptgitx --help", style="bold")
     help_text.append(" to view available commands.", style="#64748b")
+
+    config_false_text = Text()
+    config_false_text.append("Model not configured. Run 'promptgitx config' to configure the model.", style="bold red")
 
     content = Text()
     content.append("\n")
     content.append(subtitle)
     content.append("\n")
-    content.append(model_text)
-    content.append("\n")
     content.append(description)
     content.append("\n\n")
     content.append(help_text)
+    if not model_name:
+        content.append("\n")
+        content.append(config_false_text)
 
     console.print()
     console.print(Align.center(heading))

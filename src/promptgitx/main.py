@@ -275,6 +275,12 @@ def config(
 
     Use this command to add cloud provider credentials, configure local Ollama
     models, switch between saved providers, or reset local configuration.
+    Current Supported Providers: 
+    1. Groq [Cloud]
+    2. OpenAI [Cloud]
+    3. Anthropic [Cloud]
+    4. Gemini [Cloud]
+    5. Ollama [Locally]
     """
     show_app_header()
 
@@ -300,7 +306,7 @@ def config(
 # ----------------------------------------------------------------
 def main():
     if should_show_loading_message():
-        console.print("[yellow]Please wait, PromptGitX is loading...[/yellow]")
+        console.print("[#818cf8]Please wait, PromptGitX is loading...[/#818cf8]")
 
     app()
 
