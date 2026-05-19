@@ -1,7 +1,6 @@
 from typer.testing import CliRunner
 from .chat_graph import run_chat_graph
-
-from promptgitx.misc.console import console
+from promptgitx.misc.console import console, print_chat_response
 
 
 HELP_COMMANDS = [
@@ -35,14 +34,14 @@ def collect_promptgitx_help(app) -> str:
 
 def run_help_chat(app) -> None:
     while True:
-        user_input = console.input("\n[bold yellow]PromptGitX>[/bold yellow] ")
+        user_input = console.input("\n[bold #f97316]PromptGitX>[/bold #f97316] ")
         if user_input.strip().lower() in ["exit", "quit", ":q"]:
             break
-
+        console.print("")
         result = run_chat_graph(
             {
                 "user_input": user_input,
                 "promptgitx_app": app,
             }
         )
-        console.print(result.get("response", "No response generated."))
+        print_chat_response(result.get("response", "No response generated."))
