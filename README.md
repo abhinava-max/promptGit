@@ -136,7 +136,7 @@ Start a scoped PromptGitX help chat:
 promptgitx chat
 ```
 
-The chat command answers questions about PromptGitX CLI usage. It does not execute Git or shell commands.
+The chat command answers questions about PromptGitX CLI usage. It does not execute Git or shell commands yet.
 
 ## CLI Reference
 
