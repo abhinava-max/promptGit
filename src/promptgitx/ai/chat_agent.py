@@ -34,7 +34,7 @@ def collect_promptgitx_help(app) -> str:
 
 def run_help_chat(app) -> None:
     while True:
-        user_input = console.input("\n[bold #f97316]PromptGitX>[/bold #f97316] ")
+        user_input = console.input("\n[bold #38bdf8]PromptGitX>[/bold #38bdf8] ")
         if user_input.strip().lower() in ["exit", "quit", ":q"]:
             break
         console.print("")
