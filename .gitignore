@@ -1,16 +1,28 @@
+# Local environment and secrets
 .env
-venv
-__pycache__
+.env.*
+!.env.example
+.pypirc
+.pypric
+**/.env
+**/.env.*
+**/.pypirc
+**/.pypric
+$HOME/
+
+# Python/build artifacts
+venv/
+**/venv/
+__pycache__/
+**/__pycache__/
 build/
 dist/
 *.egg-info/
 *.pyc
+
+# Generated reports and local notes
 promptgitx-report-*
-
-*/.env
-*/venv
-*/__pycache__
-
 info.txt
 
+# macOS
 .DS_Store
