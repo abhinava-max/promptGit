@@ -1,5 +1,6 @@
 from rich.text import Text
 from ..misc.console import console
+from .paths import get_config_env_path
 
 
 STYLE_TITLE = "bold #c084fc"
@@ -87,6 +88,8 @@ def read_env_file(env_path):
 
 
 def write_env_file(env_path, env_data):
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+
     with env_path.open("w", encoding="utf-8") as file:
         for key, value in env_data.items():
             file.write(f"{key}={value}\n")
@@ -120,10 +123,9 @@ def set_Config(
     api_key: str = None,
     base_url: str = None,
 ):
-    from pathlib import Path
     import getpass
 
-    ENV_PATH = Path(".env")
+    ENV_PATH = get_config_env_path()
 
     def read_env():
         return read_env_file(ENV_PATH)
@@ -254,6 +256,7 @@ def set_Config(
             )
 
         print_success(f"\n{selected_provider['display']} configured successfully.")
+        print_info(f"Saved configuration to: {ENV_PATH}")
         console.print("Current provider set to ", style=STYLE_MUTED, end="")
         console.print(f"{selected_provider['name']}.", style=STYLE_ACCENT)
 
@@ -262,9 +265,7 @@ def set_Config(
 
 
 def reset_config():
-    from pathlib import Path
-
-    ENV_PATH = Path(".env")
+    ENV_PATH = get_config_env_path()
 
     if ENV_PATH.exists():
         ENV_PATH.unlink()
@@ -273,9 +274,7 @@ def reset_config():
 
 
 def switch_provider(provider: str):
-    from pathlib import Path
-
-    ENV_PATH = Path(".env")
+    ENV_PATH = get_config_env_path()
     selected_provider = get_provider_by_value(provider)
 
     if not selected_provider:

@@ -48,10 +48,10 @@ For package-style local development, install the project in editable mode:
 pip install -e .
 ```
 
-3. Create your environment file:
+3. Configure your LLM provider:
 
 ```bash
-cp .env.example .env
+promptgitx config
 ```
 
 ## How To Run
@@ -195,7 +195,9 @@ PromptGitX supports the following providers:
 - Gemini
 - Ollama
 
-The `config` command writes provider settings to a `.env` file, including the current provider, API key or base URL, and up to five model names.
+The `config` command writes provider settings to `~/.promptgitx/.env`, including the current provider, API key or base URL, and up to five model names. This keeps PromptGitX configuration stable no matter which project directory you run the CLI from.
+
+If you intentionally want a different config file, set `PROMPTGITX_ENV_PATH` to an explicit path before running PromptGitX.
 
 The welcome screen displays the active model as:
 

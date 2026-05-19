@@ -11,14 +11,12 @@ if __package__ in (None, ""):
     from promptgitx.misc.heading import clear_screen, show_welcome
     from promptgitx.misc.console import console
     from promptgitx.misc.analyzer_help import show_analyze_help
-    from promptgitx.ai.chat_agent import run_help_chat
     from promptgitx import __version__
 else:
     from .config.config import set_Config, reset_config, switch_provider
     from .misc.heading import clear_screen, show_welcome
     from .misc.console import console
     from .misc.analyzer_help import show_analyze_help
-    from .ai.chat_agent import run_help_chat
     from . import __version__
 
 app = typer.Typer(
@@ -114,6 +112,9 @@ def chat():
     Git or shell commands.
     """
     show_app_header()
+
+    from promptgitx.ai.chat_agent import run_help_chat
+
     run_help_chat(app)
 
 
@@ -266,7 +267,7 @@ def config(
         None,
         "--reset",
         "-r",
-        help="Remove the local PromptGitX .env configuration file.",
+        help="Remove the PromptGitX user configuration file.",
     ),
 ):
     """
