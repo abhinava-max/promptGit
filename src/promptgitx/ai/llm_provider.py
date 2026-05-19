@@ -7,8 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-
-ENV_PATH = Path(".env")
+from ..config.paths import get_config_env_path
 
 PROVIDER_TO_LANGCHAIN = {
     "GROQ": "groq",
@@ -91,7 +90,10 @@ class RuntimeModelRouter:
         )
 
 
-def read_env(env_path: Path = ENV_PATH) -> dict[str, str]:
+def read_env(env_path: Path | None = None) -> dict[str, str]:
+    if env_path is None:
+        env_path = get_config_env_path()
+
     env_data: dict[str, str] = {}
 
     if not env_path.exists():
@@ -119,7 +121,7 @@ def load_env_into_process(env_data: dict[str, str]) -> None:
         os.environ.setdefault("GOOGLE_API_KEY", env_data["GEMINI_API_KEY"])
 
 
-def get_active_llm_config(env_path: Path = ENV_PATH) -> LLMConfig:
+def get_active_llm_config(env_path: Path | None = None) -> LLMConfig:
     env_data = read_env(env_path)
     load_env_into_process(env_data)
 
@@ -153,7 +155,7 @@ def get_active_llm_config(env_path: Path = ENV_PATH) -> LLMConfig:
     return LLMConfig(provider=provider, models=models)
 
 
-def get_current_model_name(env_path: Path = ENV_PATH) -> str | None:
+def get_current_model_name(env_path: Path | None = None) -> str | None:
     config = get_active_llm_config(env_path)
 
     if not config.primary_model:
@@ -162,7 +164,7 @@ def get_current_model_name(env_path: Path = ENV_PATH) -> str | None:
     return config.primary_model.display_name
 
 
-def get_current_model_display(env_path: Path = ENV_PATH) -> str:
+def get_current_model_display(env_path: Path | None = None) -> str:
     return get_current_model_name(env_path) or "Not configured"
 
 

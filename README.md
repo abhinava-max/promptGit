@@ -1,65 +1,29 @@
 # PromptGitX
 
-PromptGitX is an AI-powered Git commit assistant built as a Python CLI. It is intended to help generate clean commit messages, review staged changes, and manage LLM provider configuration from the terminal.
+PromptGitX is an AI-powered Git review assistant packaged as a Python CLI. It helps you inspect commits, staged changes, branches, and pull requests from the terminal, then produces structured review reports in terminal, JSON, TXT, DOCX, or PDF formats.
 
-## Features
+## Highlights
 
-- Interactive CLI built with Typer
-- Rich terminal welcome screen
-- LLM provider configuration for Groq, OpenAI, Anthropic, Gemini, and Ollama
-- AI review reports for commits, commit ranges, pull requests, and staged changes
-- LangGraph-based review workflow
-- Hunk-based splitting for large file diffs instead of silent trimming
-- Verified changed-line references from Git diff hunks
-- Terminal, JSON, TXT, DOCX, and PDF report output
+- Review staged changes, commits, commit ranges, pull requests, and recent history.
+- Generate structured AI review reports with risk, recommendation, grouped issues, and changed-line references.
+- Save reports as `.txt`, `.json`, `.docx`, or `.pdf`.
+- Configure Groq, OpenAI, Anthropic, Gemini, or local Ollama models from the CLI.
+- Use up to five fallback models per provider during one review run.
+- Ask PromptGitX usage questions through the scoped `chat` command.
+- Run as a normal Python package with a `promptgitx` console command.
 
-## Project Structure
+## Installation
 
-```text
-pyproject.toml          # PyPI/build metadata
-src/
-  promptgitx/
-    main.py              # CLI entry point
-    ai/                  # AI review/report helpers
-    prompts/             # LangChain prompt templates
-    config/              # LLM provider configuration helpers
-    gitcodes/            # Git diff and repository helpers
-    misc/                # Rich/figlet terminal UI helpers
-```
-
-## Setup
-
-1. Create and activate a virtual environment:
+Install from PyPI:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+python3 -m pip install promptgitx
 ```
 
-2. Install dependencies:
+Check the installed version:
 
 ```bash
-pip install -r requirements.txt
-```
-
-For package-style local development, install the project in editable mode:
-
-```bash
-pip install -e .
-```
-
-3. Create your environment file:
-
-```bash
-cp .env.example .env
-```
-
-## How To Run
-
-Recommended local development command after `pip install -e .`:
-
-```bash
-promptgitx
+promptgitx --version
 ```
 
 View available commands:
@@ -68,58 +32,77 @@ View available commands:
 promptgitx --help
 ```
 
-Show the installed version:
+## Quick Start
 
-```bash
-promptgitx --version
-```
-
-You can also run directly from source without installing:
-
-```bash
-python3 src/promptgitx/main.py
-```
-
-Or run it as a package module:
-
-```bash
-PYTHONPATH=src python3 -m promptgitx.main
-```
-
-## Commands
-
-Configure an LLM provider interactively:
+Configure an LLM provider:
 
 ```bash
 promptgitx config
 ```
 
-Configure a provider with CLI options:
+Review staged changes:
 
 ```bash
-promptgitx config --provider ollama --models llama3
-promptgitx config --provider openai --models gpt-4o-mini --api-key YOUR_API_KEY
+promptgitx analyze --staged
 ```
 
-Reset configuration:
+Review the latest commit:
+
+```bash
+promptgitx analyze --last
+```
+
+Save a PDF report:
+
+```bash
+promptgitx analyze --last --save review.pdf
+```
+
+Save to a specific path:
+
+```bash
+promptgitx analyze --staged --save ./reports/staged-review.pdf
+```
+
+## Commands
+
+### `promptgitx config`
+
+Configure the LLM provider used by PromptGitX.
+
+Interactive setup:
+
+```bash
+promptgitx config
+```
+
+Configure directly with options:
+
+```bash
+promptgitx config --provider groq --models MODEL_NAME --api-key YOUR_API_KEY
+promptgitx config --provider openai --models MODEL_NAME --api-key YOUR_API_KEY
+promptgitx config --provider anthropic --models MODEL_NAME --api-key YOUR_API_KEY
+promptgitx config --provider gemini --models MODEL_NAME --api-key YOUR_API_KEY
+promptgitx config --provider ollama --models MODEL_NAME --base-url http://localhost:11434
+```
+
+Switch to an already configured provider:
+
+```bash
+promptgitx config --use groq
+```
+
+Reset saved PromptGitX configuration:
 
 ```bash
 promptgitx config --reset
 ```
 
-Start the chat command:
+### `promptgitx analyze`
 
-```bash
-promptgitx chat
-```
+Generate an AI review report for one Git target.
 
-Generate a review report:
-
-```bash
-promptgitx analyze
-```
-
-Analyze examples:
+Examples:
 
 ```bash
 promptgitx analyze --staged
@@ -130,7 +113,9 @@ promptgitx analyze --compare main..feature-branch
 promptgitx analyze --pr 123
 ```
 
-Output modes:
+Use only one review target at a time. For example, use `--staged` or `--last`, not both.
+
+Output examples:
 
 ```bash
 promptgitx analyze --last --summary
@@ -141,71 +126,117 @@ promptgitx analyze --last --save report.docx
 promptgitx analyze --last --save report.pdf
 ```
 
-If `--save` is not passed, PromptGitX asks whether you want to save the report after displaying it.
-Use only one review target per command, such as `--last` or `--staged`, not both.
-`--json` prints raw JSON without the welcome banner so it can be used in scripts.
+If `--save` is not passed, PromptGitX displays the report and then asks whether you want to save it.
 
-## CLI Option Reference
+### `promptgitx chat`
+
+Start a scoped PromptGitX help chat:
+
+```bash
+promptgitx chat
+```
+
+The chat command answers questions about PromptGitX CLI usage. It does not execute Git or shell commands.
+
+## CLI Reference
 
 Global options:
 
-| Long option | Short option | Description |
-| --- | --- | --- |
-| `--version` | none | Show the installed PromptGitX version and exit. |
-| `--help` | none | Show CLI help. |
+| Option | Description |
+| --- | --- |
+| `--version` | Show the installed PromptGitX version and exit. |
+| `--help` | Show CLI help. |
 
 `promptgitx config` options:
 
-| Long option | Short option | Description |
+| Option | Short | Description |
 | --- | --- | --- |
-| `--provider` | `-p` | LLM provider to configure: `groq`, `openai`, `anthropic`, `gemini`, or `ollama`. |
+| `--provider` | `-p` | Provider to configure: `groq`, `openai`, `anthropic`, `gemini`, or `ollama`. |
 | `--models` | `-m` | Comma-separated list of up to five model names. |
 | `--api-key` | none | API key for cloud providers. |
 | `--base-url` | none | Base URL for local providers like Ollama. |
 | `--use` | `-u` | Switch to an already configured provider. |
-| `--reset` | `-r` | Reset saved configuration. |
+| `--reset` | `-r` | Remove saved PromptGitX configuration. |
 
 `promptgitx analyze` target options:
 
-| Long option | Short option | Description |
+| Option | Short | Description |
 | --- | --- | --- |
-| `--commit` | `-c` | Review one specific commit. |
+| `--commit` | `-c` | Review one commit by SHA, tag, or revision. |
 | `--commits` | `-C` | Review multiple commits. Can be provided more than once. |
-| `--compare` | `-p` | Review a comparison such as `main..feature-branch`. |
-| `--pr` | `-P` | Review a GitHub pull request by number. Requires GitHub CLI. |
+| `--compare` | `-p` | Review a range such as `main..feature-branch`. |
+| `--pr` | `-P` | Review a GitHub pull request by number. Requires the GitHub CLI. |
 | `--last` | `-l` | Review the latest commit. |
 | `--last-n` | `-n` | Review the last N commits. |
-| `--staged` | `-s` | Review staged changes. |
+| `--staged` | `-s` | Review currently staged changes. |
 
 `promptgitx analyze` output options:
 
-| Long option | Short option | Description |
-| --- | --- | --- |
-| `--json` | none | Print the raw structured JSON report. |
-| `--summary` | none | Print only the short review summary. |
-| `--save` | none | Save the report to `.txt`, `.json`, `.docx`, or `.pdf`. |
+| Option | Description |
+| --- | --- |
+| `--json` | Print the raw structured JSON report. |
+| `--summary` | Print only the short summary and final recommendation. |
+| `--save` | Save the report to `.txt`, `.json`, `.docx`, or `.pdf`. |
 
 ## Configuration
 
-PromptGitX supports the following providers:
+PromptGitX stores its provider settings at:
 
-- Groq
-- OpenAI
-- Anthropic
-- Gemini
-- Ollama
+```text
+~/.promptgitx/.env
+```
 
-The `config` command writes provider settings to a `.env` file, including the current provider, API key or base URL, and up to five model names.
+This keeps your API keys in one user-level location instead of creating `.env` files in whichever project directory you run the CLI from.
 
-The welcome screen displays the active model as:
+To use a different config file intentionally, set `PROMPTGITX_ENV_PATH`:
+
+```bash
+PROMPTGITX_ENV_PATH=/path/to/promptgitx.env promptgitx analyze --last
+```
+
+The config file stores values such as:
+
+```text
+CURRENT_PROVIDER=GROQ
+GROQ_API_KEY=...
+GROQ_MODEL_1=MODEL_NAME
+```
+
+The active model appears in the welcome screen as:
 
 ```text
 Model: <PROVIDER> | <MODEL_NAME>
 ```
 
-PromptGitX uses the first configured model for the active provider first. During one analyze run, if a model call fails, PromptGitX advances to the next configured model and keeps using that model for later chunks in the same run.
+## Model Fallbacks
 
-## Analyze Workflow
+Each provider can store up to five model names. PromptGitX starts with model 1. If a model call fails during a review run, PromptGitX advances to the next configured model and continues the run with that fallback.
+
+Example:
+
+```bash
+promptgitx config --provider groq --models MODEL_1,MODEL_2
+```
+
+## Report Formats
+
+PromptGitX can print or save reports in these formats:
+
+| Format | Usage |
+| --- | --- |
+| Terminal | Default formatted report in the terminal. |
+| JSON | `--json` or `--save report.json`. Useful for scripts. |
+| TXT | `--save report.txt`. Plain text report. |
+| DOCX | `--save report.docx`. Word-compatible document. |
+| PDF | `--save report.pdf`. Styled PDF report. |
+
+When saving to a path, PromptGitX creates missing parent folders when possible:
+
+```bash
+promptgitx analyze --last --save ./reports/latest-review.pdf
+```
+
+## How Analysis Works
 
 The `analyze` command uses a LangGraph workflow:
 
@@ -218,33 +249,80 @@ load_diff
   -> final_report
 ```
 
-Workflow details:
+What happens internally:
 
 - `load_diff` collects the requested Git diff using `git` or `gh`.
-- `parse_diff` converts the raw diff into file-level chunks and computes changed-line references from diff hunk headers.
-- `split_large_chunks` splits oversized file chunks into hunk-based review chunks without dropping diff data.
-- `review_chunks` sends each review chunk to the configured LLM and validates returned references.
-- `merge_file_reviews` combines subchunk reviews back into one review per file.
-- `final_report` builds the structured report with risk, recommendation, grouped issues, and output-ready data.
+- `parse_diff` turns raw diffs into file-level chunks and changed-line references.
+- `split_large_chunks` splits oversized diffs by hunks instead of silently trimming content.
+- `review_chunks` sends review chunks to the configured LLM.
+- `merge_file_reviews` combines chunk-level findings back into file-level findings.
+- `final_report` builds the final structured report and output data.
 
-Large diffs are split by hunks instead of being cut at an arbitrary character limit. If a single hunk is very large, PromptGitX keeps that hunk intact to avoid corrupting line references.
+PromptGitX keeps large hunks intact where possible so line references do not get corrupted by arbitrary slicing.
 
-The final report is mostly built by deterministic Python logic. The LLM reviews individual chunks; Python then normalizes issues, validates references, merges file reviews, calculates risk, and formats the final outputs.
+## Requirements
 
-## Build For Upload
+- Python 3.10 or newer.
+- Git installed and available on `PATH`.
+- GitHub CLI `gh` for `promptgitx analyze --pr`.
+- An API key for a cloud LLM provider, or a running Ollama server for local models.
 
-Build source and wheel distributions:
+## Local Development
+
+Clone the repository:
 
 ```bash
-python3 -m build --sdist --wheel
+git clone https://github.com/abhinava-max/promptGit.git
+cd promptGit
 ```
 
-The files will be created in:
+Create a virtual environment:
 
-```text
-dist/
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 ```
+
+Install in editable mode:
+
+```bash
+python3 -m pip install -e .
+```
+
+Run from the installed console command:
+
+```bash
+promptgitx --help
+```
+
+Run directly from source:
+
+```bash
+python3 src/promptgitx/main.py --help
+```
+
+Build package distributions:
+
+```bash
+python3 -m build
+```
+
+Check distributions before publishing:
+
+```bash
+python3 -m twine check dist/*
+```
+
+## Project Links
+
+- Source: https://github.com/abhinava-max/promptGit
+- Issues: https://github.com/abhinava-max/promptGit/issues
+- PyPI: https://pypi.org/project/promptgitx/
 
 ## Status
 
-This project is in early development. The review report workflow is functional, including saved TXT, JSON, DOCX, and PDF outputs. The chat command is still a placeholder.
+PromptGitX is in early development. The review workflow and report exporters are functional, and the CLI surface may still evolve between minor versions.
+
+## License
+
+MIT

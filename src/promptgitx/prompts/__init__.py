@@ -13,8 +13,12 @@ from .review_prompts import (
 )
 
 from .chat_agent_prompts import (
+    CHAT_GIT_GITHUB_QA_PROMPT,
     CHAT_PROMPTGITX_ASSISTANT_SYSTEM_PROMPT,
-    get_chat_help_prompt,
+    CLASSIFIER_PROMPT,
+    get_chat_intent_prompt,
+    get_git_github_question_prompt,
+    get_promptgitx_help_prompt,
 )
 __all__ = [
     "CHUNK_REVIEW_SYSTEM_PROMPT",
@@ -26,6 +30,10 @@ __all__ = [
     "get_chunk_review_prompt",
     "get_final_review_prompt",
     "get_report_refinement_prompt",
+    "CHAT_GIT_GITHUB_QA_PROMPT",
     "CHAT_PROMPTGITX_ASSISTANT_SYSTEM_PROMPT",
-    "get_chat_help_prompt",
+    "CLASSIFIER_PROMPT",
+    "get_chat_intent_prompt",
+    "get_git_github_question_prompt",
+    "get_promptgitx_help_prompt",
 ]

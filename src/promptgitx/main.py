@@ -17,13 +17,16 @@ else:
     from .misc.heading import clear_screen, show_welcome
     from .misc.console import console
     from .misc.analyzer_help import show_analyze_help
-    from .ai.chat_agent import run_help_chat
     from . import __version__
 
 app = typer.Typer(
     name="PromptGitX",
-    help="AI-powered Git commit assistant.",
+    help=(
+        "AI-powered Git review assistant for generating structured code review "
+        "reports from commits, pull requests, branches, and staged changes."
+    ),
     add_completion=False,
+    rich_markup_mode="rich",
 )
 
 def print_version(value: bool):
@@ -102,10 +105,17 @@ def callback(
 @app.command()
 def chat():
     """
-    Start the AI chat interface to generate commit messages, review reports and more.
+    Start a scoped PromptGitX help chat.
+
+    The chat assistant currently answers questions about PromptGitX CLI usage
+    only. It uses the live command help text as context and does not execute
+    Git or shell commands.
     """
     show_app_header()
-    run_help_chat()
+
+    from promptgitx.ai.chat_agent import run_help_chat
+
+    run_help_chat(app)
 
 
 
@@ -118,53 +128,53 @@ def analyze(
         None,
         "--commit",
         "-c",
-        help="Generate a review report for any Specific Commit.",
+        help="Review a single commit by SHA, tag, or any Git revision.",
     ),
     commits: Optional[List[str]] = typer.Option(
         None,
         "--commits",
         "-C",
-        help="Generate a review report for Multiple Commits.",
+        help="Review multiple commits. Pass the option once per commit.",
     ),
     compare: Optional[str] = typer.Option(
         None,
         "--compare",
         "-p",
-        help="Generate a review report by comparing multiple branches/tags/commits",
+        help="Review a comparison range, such as main..feature or v1.0..HEAD.",
     ),
     pr: Optional[int] = typer.Option(
         None,
         "--pr",
         "-P",
-        help="Generate a review report for a Pull Request.",
+        help="Review a pull request by number using the GitHub CLI.",
     ),
     last: Optional[bool] = typer.Option(
         None,
         "--last",
         "-l",
-        help="Generate a review report for the last Commit.",
+        help="Review the most recent commit on the current branch.",
     ),
     last_n: Optional[int] = typer.Option(
         None,
         "--last-n",
         "-n",
-        help="Generate a review report for the last n Commits.",
+        help="Review the last N commits on the current branch.",
     ),
     staged: Optional[bool] = typer.Option(
         None,
         "--staged",
         "-s",
-        help="Generate a review report for the Staged Changes.",
+        help="Review currently staged changes before committing.",
     ),
     output_json: Optional[bool] = typer.Option(
         None,
         "--json",
-        help="Print the raw structured JSON report.",
+        help="Print the raw structured JSON report instead of the formatted report.",
     ),
     summary: Optional[bool] = typer.Option(
         None,
         "--summary",
-        help="Print only the short review summary.",
+        help="Print only the short review summary and final recommendation.",
     ),
     save: Optional[str] = typer.Option(
         None,
@@ -173,7 +183,12 @@ def analyze(
     ),
 ):
     """
-    Generate a review report.
+    Generate an AI code review report for one Git target.
+
+    Choose exactly one review target: staged changes, a commit, multiple
+    commits, a comparison range, a pull request, the last commit, or the last
+    N commits. Reports can be printed to the terminal or saved as JSON, text,
+    DOCX, or PDF.
     """
     if output_json and summary:
         raise typer.BadParameter("Use either --json or --summary, not both.")
@@ -224,39 +239,42 @@ def config(
         None,
         "--provider",
         "-p",
-        help="LLM provider to configure: groq, openai, anthropic, gemini, ollama.",
+        help="LLM provider to configure: groq, openai, anthropic, gemini, or ollama.",
     ),
     models: Optional[str] = typer.Option(
         None,
         "--models",
         "-m",
-        help="Comma-separated list of up to 5 model names.",
+        help="Comma-separated model names to try in priority order, up to 5.",
     ),
     api_key: Optional[str] = typer.Option(
         None,
         "--api-key",
-        help="API key for cloud providers.",
+        help="API key for cloud providers such as Groq, OpenAI, Anthropic, or Gemini.",
     ),
     base_url: Optional[str] = typer.Option(
         None,
         "--base-url",
-        help="Base URL for local providers like Ollama.",
+        help="Base URL for local providers such as Ollama.",
     ),
     use: Optional[str] = typer.Option(
         None,
         "--use",
         "-u",
-        help="Switch to an already configured provider.",
+        help="Switch to an already configured provider without changing its models.",
     ),
     reset: Optional[bool] = typer.Option(
         None,
         "--reset",
         "-r",
-        help="Reset configurations.",
+        help="Remove the PromptGitX user configuration file.",
     ),
 ):
     """
-    Configure PromptGitX
+    Configure the LLM provider used by PromptGitX.
+
+    Use this command to add cloud provider credentials, configure local Ollama
+    models, switch between saved providers, or reset local configuration.
     """
     show_app_header()
 
