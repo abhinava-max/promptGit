@@ -46,9 +46,7 @@ def run_help_chat(app) -> None:
 
         # Printing Status Text
         status_text = "[bold #38bdf8]PromptGitX is thinking...[/bold #38bdf8]"
-        if pending_report_request is not None:
-            status_text = "[bold #fbbf24]Generating report...[/bold #fbbf24]"
-            
+        
         with console.status(status_text):
             result = run_chat_graph(
             {

@@ -1,6 +1,7 @@
 import typer
 from typing import Optional, List
 from pathlib import Path
+from promptgitx.misc.console import console
 import sys
 
 
@@ -307,7 +308,7 @@ def config(
 def main():
     if should_show_loading_message():
         console.print("[#818cf8]Please wait, PromptGitX is loading...[/#818cf8]")
-
+        
     app()
 
 if __name__ == "__main__":
