@@ -2,6 +2,17 @@ import typer
 from typing import Optional, List
 from pathlib import Path
 import sys
+import warnings
+
+from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
+from promptgitx.misc.console import console
+
+
+warnings.filterwarnings(
+    "ignore",
+    category=LangChainPendingDeprecationWarning,
+    message=".*allowed_objects.*",
+)
 
 
 if __package__ in (None, ""):
@@ -40,6 +51,19 @@ def show_app_header():
 
     clear_screen()
     show_welcome(model_name=get_current_model_display())
+
+
+def is_llm_configured() -> bool:
+    from promptgitx.ai.llm_provider import get_active_llm_config
+
+    return bool(get_active_llm_config().primary_model)
+
+
+def show_config_required_message() -> None:
+    console.print(
+        "PromptGitX is not configured yet. Run `promptgitx config` first.",
+        style="bold #fb7185",
+    )
 
 
 def should_show_loading_message() -> bool:
@@ -112,6 +136,10 @@ def chat():
     Git or shell commands.
     """
     show_app_header()
+
+    if not is_llm_configured():
+        show_config_required_message()
+        return
 
     from promptgitx.ai.chat_agent import run_help_chat
 
@@ -211,21 +239,51 @@ def analyze(
     if not output_json:
         show_app_header()
 
-    from promptgitx.ai.pr_analyzer import generate_report
+    if not is_llm_configured():
+        show_config_required_message()
+        return
 
-    generate_report(
-        mode=mode,
-        commit=commit,
-        commits=commits,
-        compare=compare,
-        pr=pr,
-        last=last,
-        last_n=last_n,
-        staged=staged,
-        output_json=bool(output_json),
-        summary_only=bool(summary),
-        save_path=save,
-    )
+    from promptgitx.ai.json_utils import to_pretty_json
+    from promptgitx.ai.pr_analyzer import create_report, maybe_prompt_save
+    from promptgitx.reports import render_summary_report, render_terminal_report, save_report
+
+    try:
+        report_input = {
+            "mode": mode,
+            "commit": commit,
+            "commits": commits,
+            "compare": compare,
+            "pr": pr,
+            "last": last,
+            "last_n": last_n,
+            "staged": staged,
+        }
+
+        if output_json:
+            report = create_report(**report_input)
+        else:
+            with console.status("[#818cf8]Creating review report...[/#818cf8]", spinner="dots12"):
+                report = create_report(**report_input)
+
+        if not report:
+            console.print("No report was generated.")
+            return
+
+        if output_json:
+            console.print(to_pretty_json(report))
+        elif summary:
+            console.print(render_summary_report(report))
+        else:
+            console.print(render_terminal_report(report))
+
+        if save:
+            saved_path = save_report(report, save)
+            console.print(f"\nReport saved to: {saved_path}", style="bold #22c55e")
+        elif not output_json and not summary:
+            maybe_prompt_save(report)
+
+    except Exception as error:
+        console.print(f"Failed to generate review report: {error}", style="bold #fb7185")
 
 
 
@@ -307,7 +365,7 @@ def config(
 def main():
     if should_show_loading_message():
         console.print("[#818cf8]Please wait, PromptGitX is loading...[/#818cf8]")
-
+        
     app()
 
 if __name__ == "__main__":
