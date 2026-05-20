@@ -6,6 +6,30 @@ from .json_utils import to_pretty_json
 from .review_graph import run_review_graph
 
 
+def create_report(
+        mode: str,
+        commit=None,
+        commits=None,
+        compare=None,
+        pr=None,
+        last=None,
+        last_n=None,
+        staged=None,
+):
+    result = run_review_graph(
+        {
+            "mode": mode,
+            "commit": commit,
+            "commits": commits,
+            "compare": compare,
+            "pr": pr,
+            "last": last,
+            "last_n": last_n,
+            "staged": staged,
+        }
+    )
+    return result.get("report")
+
 def generate_report(
     mode: str,
     commit: Optional[str] = None,
