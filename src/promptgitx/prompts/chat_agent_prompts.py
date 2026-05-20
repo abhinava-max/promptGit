@@ -19,6 +19,21 @@ code/changes/commits/branches/pull requests as promptgitx_report_generation.
 Available report modes are "staged changes", "last commit", "single commit",
 "multiple commits", "last N commits", "compare", and "pull request".
 
+Routing priority:
+1. If the user asks to execute, mutate, or plan a Git/GitHub operation, route
+   to git_workflow_execution. This includes push, pull, commit, checkout,
+   switch, merge, rebase, reset, revert, stash, tag, branch creation/deletion,
+   add, restore, fetch, clone, opening/closing/merging PRs, or running git/gh
+   commands.
+2. If the request mixes Git/GitHub execution with report generation, route to
+   git_workflow_execution because repository-changing work must be handled
+   before reporting.
+3. If the user asks for conceptual Git/GitHub knowledge without asking you to
+   run or plan a command, route to git_github_question.
+4. If the user asks how to use PromptGitX, route to promptgitx_query.
+5. If the user asks PromptGitX to create a review report and does not ask for
+   Git/GitHub execution, route to promptgitx_report_generation.
+
 Important distinction:
 - If the user asks how/what/where/when/why, or asks whether a feature exists,
   route to promptgitx_query.
@@ -49,6 +64,11 @@ Routing examples:
 - "create a report for the last 3 commits" -> promptgitx_report_generation
 - "run git status" -> git_workflow_execution
 - "create a branch for me" -> git_workflow_execution
+- "push my commits and generate me a report" -> git_workflow_execution
+- "commit my changes and create a report" -> git_workflow_execution
+- "checkout main and review staged changes" -> git_workflow_execution
+- "merge this PR and then make a report" -> git_workflow_execution
+- "what does git push do?" -> git_github_question
 
 Return JSON Only:
 {{"intent": "...", "reason": "..."}}
