@@ -9,7 +9,7 @@ PromptGitX is an AI-powered Git review assistant packaged as a Python CLI. It he
 - Save reports as `.txt`, `.json`, `.docx`, or `.pdf`.
 - Configure Groq, OpenAI, Anthropic, Gemini, or local Ollama models from the CLI.
 - Use up to five fallback models per provider during one review run.
-- Ask PromptGitX usage questions through the scoped `chat` command.
+- Ask PromptGitX usage questions and generate review reports through the scoped `chat` command.
 - Run as a normal Python package with a `promptgitx` console command.
 
 ## Installation
@@ -130,13 +130,28 @@ If `--save` is not passed, PromptGitX displays the report and then asks whether 
 
 ### `promptgitx chat`
 
-Start a scoped PromptGitX help chat:
+Start a scoped PromptGitX chat:
 
 ```bash
 promptgitx chat
 ```
 
-The chat command answers questions about PromptGitX CLI usage. It does not execute Git or shell commands yet.
+The chat command answers questions about PromptGitX CLI usage and can generate review reports conversationally. If a report request is missing details, PromptGitX asks a follow-up question and remembers the pending report request.
+
+Examples:
+
+```text
+PromptGitX> make me a PR report
+PromptGitX> 2
+```
+
+```text
+PromptGitX> review my staged changes
+PromptGitX> create a report for the last 3 commits
+PromptGitX> compare main..feature-branch
+```
+
+Chat report generation preserves the same terminal report styling as `promptgitx analyze`. It does not execute repository-changing Git operations such as push, commit, checkout, merge, or rebase.
 
 ## CLI Reference
 
@@ -259,6 +274,34 @@ What happens internally:
 - `final_report` builds the final structured report and output data.
 
 PromptGitX keeps large hunks intact where possible so line references do not get corrupted by arbitrary slicing.
+
+## Chat Report Flow
+
+The `chat` command uses a LangGraph chat workflow:
+
+```text
+classify_chat_intent
+  -> promptgitx_query
+  -> promptgitx_report_generation
+  -> git_github_question
+  -> git_workflow_execution
+```
+
+For report generation, chat extracts the report target with an LLM-backed structured request parser. It supports natural follow-ups such as:
+
+```text
+PromptGitX> make me a report
+PromptGitX> staged changes
+```
+
+or:
+
+```text
+PromptGitX> make me a PR report
+PromptGitX> second pr
+```
+
+Repository-changing Git/GitHub requests are routed separately from report generation.
 
 ## Requirements
 

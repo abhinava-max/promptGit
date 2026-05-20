@@ -1,8 +1,18 @@
 import typer
 from typing import Optional, List
 from pathlib import Path
-from promptgitx.misc.console import console
 import sys
+import warnings
+
+from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
+from promptgitx.misc.console import console
+
+
+warnings.filterwarnings(
+    "ignore",
+    category=LangChainPendingDeprecationWarning,
+    message=".*allowed_objects.*",
+)
 
 
 if __package__ in (None, ""):
@@ -41,6 +51,19 @@ def show_app_header():
 
     clear_screen()
     show_welcome(model_name=get_current_model_display())
+
+
+def is_llm_configured() -> bool:
+    from promptgitx.ai.llm_provider import get_active_llm_config
+
+    return bool(get_active_llm_config().primary_model)
+
+
+def show_config_required_message() -> None:
+    console.print(
+        "PromptGitX is not configured yet. Run `promptgitx config` first.",
+        style="bold #fb7185",
+    )
 
 
 def should_show_loading_message() -> bool:
@@ -113,6 +136,10 @@ def chat():
     Git or shell commands.
     """
     show_app_header()
+
+    if not is_llm_configured():
+        show_config_required_message()
+        return
 
     from promptgitx.ai.chat_agent import run_help_chat
 
@@ -211,6 +238,10 @@ def analyze(
 
     if not output_json:
         show_app_header()
+
+    if not is_llm_configured():
+        show_config_required_message()
+        return
 
     from promptgitx.ai.pr_analyzer import generate_report
 
