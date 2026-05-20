@@ -163,6 +163,8 @@ Rules:
 
 REPORT_REFINEMENT_USER_PROMPT = """
 Refine this report JSON.
+If the report has symantically similar fidings that can be merged into one, merge them.
+If the report has distinct findings that should not be merged, keep them separate.
 
 Input report:
 {report_json}

@@ -5,26 +5,48 @@ Classify the user request into exactly one of the following categories:
 1. git_workflow_execution
 2. git_github_question
 3. promptgitx_query
-4. out_of_scope
+4. promptgitx_report_generation
+5. out_of_scope
 
 PromptGitX routing context:
 PromptGitX is an AI-powered Git review CLI with config, analyze, and chat
-commands. Treat questions about PromptGitX commands, LLM provider setup,
+commands. 
+Treat questions about PromptGitX commands, LLM provider setup,
 report formats, saved config, analysis targets, or report issue categories as
 promptgitx_query.
+Treat requests to create, generate, review, analyze, check, scan, or compare
+code/changes/commits/branches/pull requests as promptgitx_report_generation.
+Available report modes are "staged changes", "last commit", "single commit",
+"multiple commits", "last N commits", "compare", and "pull request".
+
+Important distinction:
+- If the user asks how/what/where/when/why, or asks whether a feature exists,
+  route to promptgitx_query.
+- If the user asks PromptGitX to actually create a report/review/analysis,
+  route to promptgitx_report_generation.
 
 Definitions:
 git_workflow_execution: user wants you to run or plan a git/gh command or modify repo state.
 git_github_question: user asks general conceptual Git/Github/git cli/gh cli related questions.
 promptgitx_query: user asks about PromptGitX usage, commands, features, reports, config, analyze, chat.
+promptgitx_report_generation: user asks PromptGitX to generate a review report or compare/review/analyze a report target.
 out_of_scope: anything else.
 
 Routing examples:
 - "how do I review staged changes with PromptGitX?" -> promptgitx_query
 - "where does PromptGitX save config?" -> promptgitx_query
 - "can PromptGitX save PDF reports?" -> promptgitx_query
+- "how to create a PR report" -> promptgitx_query
+- "how do I generate a report for my changes?" -> promptgitx_query
 - "what is a pull request?" -> git_github_question
 - "how do I checkout a PR with gh?" -> git_github_question
+- "generate a report for my changes" -> promptgitx_report_generation
+- "create a PR report" -> promptgitx_report_generation
+- "compare my staged changes" -> promptgitx_report_generation
+- "compare my second pr and create a report" -> promptgitx_report_generation
+- "compare my 2nd pr" -> promptgitx_report_generation
+- "review PR 12" -> promptgitx_report_generation
+- "create a report for the last 3 commits" -> promptgitx_report_generation
 - "run git status" -> git_workflow_execution
 - "create a branch for me" -> git_workflow_execution
 
