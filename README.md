@@ -344,18 +344,6 @@ Run directly from source:
 python3 src/promptgitx/main.py --help
 ```
 
-Build package distributions:
-
-```bash
-python3 -m build
-```
-
-Check distributions before publishing:
-
-```bash
-python3 -m twine check dist/*
-```
-
 ## Project Links
 
 - Source: https://github.com/abhinava-max/promptGit
