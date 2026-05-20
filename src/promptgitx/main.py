@@ -243,21 +243,47 @@ def analyze(
         show_config_required_message()
         return
 
-    from promptgitx.ai.pr_analyzer import generate_report
+    from promptgitx.ai.json_utils import to_pretty_json
+    from promptgitx.ai.pr_analyzer import create_report, maybe_prompt_save
+    from promptgitx.reports import render_summary_report, render_terminal_report, save_report
 
-    generate_report(
-        mode=mode,
-        commit=commit,
-        commits=commits,
-        compare=compare,
-        pr=pr,
-        last=last,
-        last_n=last_n,
-        staged=staged,
-        output_json=bool(output_json),
-        summary_only=bool(summary),
-        save_path=save,
-    )
+    try:
+        report_input = {
+            "mode": mode,
+            "commit": commit,
+            "commits": commits,
+            "compare": compare,
+            "pr": pr,
+            "last": last,
+            "last_n": last_n,
+            "staged": staged,
+        }
+
+        if output_json:
+            report = create_report(**report_input)
+        else:
+            with console.status("[#818cf8]Creating review report...[/#818cf8]", spinner="dots12"):
+                report = create_report(**report_input)
+
+        if not report:
+            console.print("No report was generated.")
+            return
+
+        if output_json:
+            console.print(to_pretty_json(report))
+        elif summary:
+            console.print(render_summary_report(report))
+        else:
+            console.print(render_terminal_report(report))
+
+        if save:
+            saved_path = save_report(report, save)
+            console.print(f"\nReport saved to: {saved_path}", style="bold #22c55e")
+        elif not output_json and not summary:
+            maybe_prompt_save(report)
+
+    except Exception as error:
+        console.print(f"Failed to generate review report: {error}", style="bold #fb7185")
 
 
 
