@@ -4,13 +4,14 @@ from langgraph.graph import StateGraph, END, START
 from .graph_state import ChatGraphState
 
 from .llm_provider import RuntimeModelRouter
-from .json_utils import extract_json_object
+from .json_utils import extract_json_object, to_pretty_json
 from langchain_core.output_parsers import StrOutputParser
 
 from ..prompts import (
     get_chat_intent_prompt,
     get_git_github_question_prompt,
     get_promptgitx_help_prompt,
+    get_report_request_extractor_prompt,
 )
 
 ALLOWED_CHAT_INTENTS = {
@@ -46,7 +47,12 @@ DIRECT_REPORT_ACTION_RE = re.compile(
     r"(analy[sz]e|review|compare|create|generate|make|check|scan|inspect)\b",
     re.IGNORECASE,
 )
+BRANCH_PAIR_RE = re.compile(
+    r"\bcompare\s+([A-Za-z0-9._/-]+)\s+(?:to|with|and|against)\s+([A-Za-z0-9._/-]+)\b",
+    re.IGNORECASE,
+)
 BRANCH_COMPARE_RE = re.compile(r"\b(analy[sz]e|review|compare)\b.*\bbranch(?:es)?\b", re.IGNORECASE)
+REPORT_MODES = {"staged", "last", "last_n", "commit", "commits", "compare", "pr"}
 
 
 def is_direct_report_generation_request(user_input: str) -> bool:
@@ -63,19 +69,137 @@ def is_direct_report_generation_request(user_input: str) -> bool:
     has_pr_ordinal = PR_ORDINAL_RE.search(text) is not None
     has_compare_range = COMPARE_RANGE_RE.search(text) is not None
     has_branch_compare = BRANCH_COMPARE_RE.search(text) is not None
+    has_branch_pair = BRANCH_PAIR_RE.search(text) is not None
 
     return has_direct_report_action and (
-        has_report_target or has_pr_ordinal or has_compare_range or has_branch_compare
+        has_report_target
+        or has_pr_ordinal
+        or has_compare_range
+        or has_branch_compare
+        or has_branch_pair
     )
 
 def maybe_correct_chat_intent(intent: str, user_input: str) -> tuple[str, str | None]:
-    if intent in {"promptgitx_query", "out_of_scope"} and is_direct_report_generation_request(user_input):
+    if intent != "promptgitx_report_generation" and is_direct_report_generation_request(user_input):
         return (
             "promptgitx_report_generation",
             "Corrected an action-style report request after LLM classification.",
         )
 
     return intent, None
+
+def missing_fields_for_request(request: dict) -> list[str]:
+    mode = request.get("mode")
+
+    if not mode:
+        return ["target"]
+
+    required_fields = {
+        "pr": ["pr"],
+        "commit": ["commit"],
+        "commits": ["commits"],
+        "compare": ["compare"],
+        "last_n": ["last_n"],
+    }
+
+    return [
+        field
+        for field in required_fields.get(mode, [])
+        if not request.get(field)
+    ]
+
+def clarification_for_request(request: dict) -> str:
+    missing = set(request.get("missing") or missing_fields_for_request(request))
+    mode = request.get("mode")
+
+    if "target" in missing:
+        return (
+            "What should I review? You can say something like `PR 2`, "
+            "`staged changes`, `last commit`, `last 3 commits`, or `main..feature`."
+        )
+
+    if mode == "pr" and "pr" in missing:
+        return "Which PR number should I review?"
+
+    if mode == "compare" and "compare" in missing:
+        return "Which refs should I compare? Use a range like `main..feature`."
+
+    if mode == "commit" and "commit" in missing:
+        return "Which commit should I review? Send a commit SHA or revision."
+
+    if mode == "commits" and "commits" in missing:
+        return "Which commits should I review? Send the commit SHAs separated by spaces."
+
+    if mode == "last_n" and "last_n" in missing:
+        return "How many recent commits should I review?"
+
+    return "I need one more detail before I can generate the report."
+
+def normalize_report_request(raw_request: dict) -> dict:
+    request = dict(raw_request)
+    mode = request.get("mode")
+
+    if mode == "null":
+        mode = None
+
+    if mode not in REPORT_MODES:
+        mode = None
+
+    request["mode"] = mode
+
+    if mode == "pr" and request.get("pr") is not None:
+        try:
+            request["pr"] = int(request["pr"])
+        except (TypeError, ValueError):
+            request["pr"] = None
+
+    if mode == "last_n" and request.get("last_n") is not None:
+        try:
+            request["last_n"] = int(request["last_n"])
+        except (TypeError, ValueError):
+            request["last_n"] = None
+
+    if mode == "staged":
+        request["staged"] = True
+
+    if mode == "last":
+        request["last"] = True
+
+    if mode == "commits" and isinstance(request.get("commits"), str):
+        request["commits"] = [
+            commit
+            for commit in request["commits"].replace(",", " ").split()
+            if commit
+        ]
+
+    request["missing"] = missing_fields_for_request(request)
+
+    if request.get("missing") and not request.get("clarification_question"):
+        request["clarification_question"] = clarification_for_request(request)
+
+    return request
+
+def extract_report_request(user_input: str, pending: dict | None = None) -> dict:
+    prompt = get_report_request_extractor_prompt()
+    pending_json = to_pretty_json(pending or {})
+    raw = invoke_with_model_fallback(
+        prompt,
+        {
+            "user_input": user_input,
+            "pending_report_request": pending_json,
+        },
+    )
+
+    try:
+        request = extract_json_object(raw)
+    except Exception:
+        request = {
+            "mode": None,
+            "missing": ["target"],
+            "clarification_question": clarification_for_request({"mode": None}),
+        }
+
+    return normalize_report_request(request)
 
 def invoke_with_model_fallback(prompt, prompt_input: dict) -> str:
     model_router = RuntimeModelRouter()
@@ -101,6 +225,13 @@ def invoke_with_model_fallback(prompt, prompt_input: dict) -> str:
 
 def classify_chat_intent_node(state: ChatGraphState) -> ChatGraphState:
     user_input = state.get("user_input", "")
+
+    if state.get("pending_report_request") is not None:
+        return {
+            "intent": "promptgitx_report_generation",
+            "intent_reason": "Continuing a pending report request.",
+        }
+
     prompt = get_chat_intent_prompt()
     raw = invoke_with_model_fallback(prompt, {"user_input": user_input})
 
@@ -165,8 +296,66 @@ def promptgitx_query_node(state: ChatGraphState) -> ChatGraphState:
         "response": response.strip(),
     }
 def promptgitx_report_generation_node(state: ChatGraphState) -> ChatGraphState:
+    if state.get("pending_report_request") is None:
+        user_input = state.get("user_input", "")
+
+        if HELP_QUESTION_RE.search(user_input) or CAPABILITY_QUESTION_RE.search(user_input):
+            return promptgitx_query_node(state)
+
+    request = extract_report_request(
+        state.get("user_input", ""),
+        state.get("pending_report_request"),
+    )
+
+    if request.get("cancelled"):
+        return {
+            "pending_report_request": None,
+            "response_type": "message",
+            "response": "Okay, I cancelled the pending report request.",
+        }
+
+    if request.get("missing"):
+        return {
+            "pending_report_request": request,
+            "report_request": request,
+            "response_type": "clarification",
+            "response": request.get("clarification_question") or clarification_for_request(request),
+        }
+
+    try:
+        from .pr_analyzer import create_report
+
+        report = create_report(
+            mode=request["mode"],
+            commit=request.get("commit"),
+            commits=request.get("commits"),
+            compare=request.get("compare"),
+            pr=request.get("pr"),
+            last=request.get("last"),
+            last_n=request.get("last_n"),
+            staged=request.get("staged"),
+        )
+    except Exception as error:
+        return {
+            "pending_report_request": None,
+            "report_request": request,
+            "response_type": "error",
+            "response": f"Failed to generate review report: {error}",
+        }
+
+    if not report:
+        return {
+            "pending_report_request": None,
+            "report_request": request,
+            "response_type": "error",
+            "response": "No report was generated.",
+        }
+
     return {
-        "response": "This Feature is Currently Under Development."
+        "pending_report_request": None,
+        "report_request": request,
+        "response_type": "report",
+        "report": report,
     }
 
 def git_workflow_execution_node(state: ChatGraphState) -> ChatGraphState:
