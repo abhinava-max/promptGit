@@ -120,6 +120,21 @@ def load_env_into_process(env_data: dict[str, str]) -> None:
     if env_data.get("GEMINI_API_KEY"):
         os.environ.setdefault("GOOGLE_API_KEY", env_data["GEMINI_API_KEY"])
 
+    normalize_gemini_env()
+
+
+def normalize_gemini_env() -> None:
+    """Keep Gemini auth compatible while avoiding duplicate-key SDK warnings."""
+    gemini_key = os.environ.get("GEMINI_API_KEY")
+    google_key = os.environ.get("GOOGLE_API_KEY")
+
+    if gemini_key and not google_key:
+        os.environ["GOOGLE_API_KEY"] = gemini_key
+        google_key = gemini_key
+
+    if gemini_key and google_key:
+        os.environ.pop("GEMINI_API_KEY", None)
+
 
 def get_active_llm_config(env_path: Path | None = None) -> LLMConfig:
     env_data = read_env(env_path)
