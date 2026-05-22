@@ -16,9 +16,11 @@ from .chat_agent_prompts import (
     CHAT_GIT_GITHUB_QA_PROMPT,
     CHAT_PROMPTGITX_ASSISTANT_SYSTEM_PROMPT,
     CLASSIFIER_PROMPT,
+    GIT_WORKFLOW_REQUEST_EXTRACTOR_SYSTEM_PROMPT,
     REPORT_REQUEST_EXTRACTOR_SYSTEM_PROMPT,
     get_chat_intent_prompt,
     get_git_github_question_prompt,
+    get_git_workflow_request_extractor_prompt,
     get_promptgitx_help_prompt,
     get_report_request_extractor_prompt,
 )
@@ -35,9 +37,11 @@ __all__ = [
     "CHAT_GIT_GITHUB_QA_PROMPT",
     "CHAT_PROMPTGITX_ASSISTANT_SYSTEM_PROMPT",
     "CLASSIFIER_PROMPT",
+    "GIT_WORKFLOW_REQUEST_EXTRACTOR_SYSTEM_PROMPT",
     "REPORT_REQUEST_EXTRACTOR_SYSTEM_PROMPT",
     "get_chat_intent_prompt",
     "get_git_github_question_prompt",
+    "get_git_workflow_request_extractor_prompt",
     "get_promptgitx_help_prompt",
     "get_report_request_extractor_prompt",
 ]

@@ -31,6 +31,8 @@ class ChatGraphState(TypedDict, total=False):
     intent_reason: str
     response: str
     refusal_reason: str
+    pending_git_workflow_request: dict[str, Any] | None
+    git_workflow_request: dict[str, Any]
     pending_report_request: dict[str, Any] | None
     report_request: dict[str, Any]
     response_type: str

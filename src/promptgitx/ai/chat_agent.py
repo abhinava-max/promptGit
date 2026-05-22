@@ -36,6 +36,7 @@ def collect_promptgitx_help(app) -> str:
 
 def run_help_chat(app) -> None:
     pending_report_request = None
+    pending_git_workflow_request = None
 
     while True:
         user_input = console.input("\n[bold #38bdf8]PromptGitX>[/bold #38bdf8] ")
@@ -53,9 +54,11 @@ def run_help_chat(app) -> None:
             "user_input": user_input,
             "promptgitx_app": app,
             "pending_report_request": pending_report_request,
+            "pending_git_workflow_request": pending_git_workflow_request,
             }
         )
         pending_report_request = result.get("pending_report_request")
+        pending_git_workflow_request = result.get("pending_git_workflow_request")
 
         if result.get("response_type") == "report":
             report = result.get("report")

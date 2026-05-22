@@ -1,4 +1,5 @@
 import re
+import shlex
 
 from langgraph.graph import StateGraph, END, START
 from .graph_state import ChatGraphState
@@ -10,6 +11,7 @@ from langchain_core.output_parsers import StrOutputParser
 from ..prompts import (
     get_chat_intent_prompt,
     get_git_github_question_prompt,
+    get_git_workflow_request_extractor_prompt,
     get_promptgitx_help_prompt,
     get_report_request_extractor_prompt,
 )
@@ -42,6 +44,18 @@ CAPABILITY_QUESTION_RE = re.compile(
     r"^\s*(can|could|should)\s+(promptgitx|it|this\s+tool|the\s+cli)\b",
     re.IGNORECASE,
 )
+GIT_EXAMPLE_REQUEST_RE = re.compile(
+    r"\b("
+    r"how\s+(?:do|to)|what\s+is|what\s+does|explain|show\s+me|give\s+me|"
+    r"single\s+line|one\s+line|example|syntax|command\s+for|code\s+for"
+    r")\b.*\b(git|gh|rebase|merge|checkout|switch|reset|push|pull|commit|stash|branch|tag)\b",
+    re.IGNORECASE,
+)
+EXECUTION_REQUEST_RE = re.compile(
+    r"^\s*(?:please\s+)?(?:can|could|would)?\s*(?:you\s+)?"
+    r"(run|execute|do|perform|apply|start)\b|\bfor\s+me\b",
+    re.IGNORECASE,
+)
 DIRECT_REPORT_ACTION_RE = re.compile(
     r"^\s*(?:please\s+)?(?:can|could|would)?\s*(?:you\s+)?"
     r"(analy[sz]e|review|compare|create|generate|make|check|scan|inspect)\b",
@@ -53,6 +67,61 @@ BRANCH_PAIR_RE = re.compile(
 )
 BRANCH_COMPARE_RE = re.compile(r"\b(analy[sz]e|review|compare)\b.*\bbranch(?:es)?\b", re.IGNORECASE)
 REPORT_MODES = {"staged", "last", "last_n", "commit", "commits", "compare", "pr"}
+GIT_WORKFLOW_EXECUTABLES = {"git", "gh"}
+CONFIRMATION_YES_RE = re.compile(r"^\s*(y|yes|yeah|yep|continue|proceed|run it|execute it|do it)\s*[.!]?\s*$", re.IGNORECASE)
+CONFIRMATION_NO_RE = re.compile(r"^\s*(n|no|nope|don't|do not|cancel|stop|nevermind|never mind)\s*[.!]?\s*$", re.IGNORECASE)
+CHANGE_COMMAND_RE = re.compile(r"\b(change|edit|modify|instead|different|use this|make it)\b", re.IGNORECASE)
+
+SAFE_GIT_SUBCOMMANDS = {
+    "status",
+    "log",
+    "show",
+    "diff",
+    "rev-parse",
+    "ls-files",
+}
+SAFE_GIT_NESTED_SUBCOMMANDS = {
+    "branch": {None, "-a", "--all", "-r", "--remotes", "--show-current", "--list"},
+    "remote": {None, "-v", "--verbose", "get-url", "show"},
+}
+SAFE_GH_SUBCOMMANDS = {
+    "auth",
+    "status",
+    "pr",
+    "repo",
+    "issue",
+    "api",
+}
+SAFE_GH_NESTED_SUBCOMMANDS = {
+    "pr": {"list", "view", "status", "checks", "diff"},
+    "repo": {"view", "list"},
+    "issue": {"list", "view", "status"},
+}
+DANGEROUS_GIT_SUBCOMMANDS = {
+    "add",
+    "am",
+    "apply",
+    "bisect",
+    "checkout",
+    "cherry-pick",
+    "clean",
+    "clone",
+    "commit",
+    "fetch",
+    "merge",
+    "mv",
+    "pull",
+    "push",
+    "rebase",
+    "reset",
+    "restore",
+    "revert",
+    "rm",
+    "stash",
+    "submodule",
+    "switch",
+    "tag",
+}
 
 
 def is_direct_report_generation_request(user_input: str) -> bool:
@@ -80,6 +149,13 @@ def is_direct_report_generation_request(user_input: str) -> bool:
     )
 
 def maybe_correct_chat_intent(intent: str, user_input: str) -> tuple[str, str | None]:
+    if intent == "git_workflow_execution" and GIT_EXAMPLE_REQUEST_RE.search(user_input):
+        if not EXECUTION_REQUEST_RE.search(user_input):
+            return (
+                "git_github_question",
+                "Corrected an example-style Git question after LLM classification.",
+            )
+
     if intent != "promptgitx_report_generation" and is_direct_report_generation_request(user_input):
         return (
             "promptgitx_report_generation",
@@ -201,6 +277,273 @@ def extract_report_request(user_input: str, pending: dict | None = None) -> dict
 
     return normalize_report_request(request)
 
+def normalize_git_workflow_request(raw_request: dict, pending: dict | None = None) -> dict:
+    request = dict(raw_request)
+    pending = pending or {}
+
+    if request.get("approved") is None and CONFIRMATION_YES_RE.match(str(request.get("user_input", ""))):
+        request["approved"] = True
+
+    command = request.get("command")
+    if command is None and pending and not request.get("change_requested"):
+        command = pending.get("command")
+
+    if isinstance(command, str):
+        try:
+            command = shlex.split(command)
+        except ValueError:
+            command = None
+
+    if not isinstance(command, list) or not all(isinstance(token, str) for token in command):
+        command = None
+
+    if command is not None:
+        command = [token for token in command if token]
+
+    request["command"] = command
+    request["missing"] = request.get("missing") or []
+
+    if request.get("cancelled"):
+        request["approved"] = False
+
+    if command and not request.get("missing"):
+        request["missing"] = missing_fields_for_git_command(command)
+
+    if request["missing"] and not request.get("clarification_question"):
+        request["clarification_question"] = clarification_for_git_workflow_request(request)
+
+    return request
+
+def extract_direct_git_command(user_input: str) -> list[str] | None:
+    text = user_input.strip()
+
+    if not text:
+        return None
+
+    lowered = text.lower()
+    for prefix in ("run ", "execute "):
+        if lowered.startswith(prefix):
+            text = text[len(prefix):].strip()
+            break
+
+    if not re.match(r"^(git|gh)(\s|$)", text):
+        return None
+
+    try:
+        command = shlex.split(text)
+    except ValueError:
+        return None
+
+    return command or None
+
+def extract_git_workflow_request(user_input: str, pending: dict | None = None) -> dict:
+    if pending and CONFIRMATION_YES_RE.match(user_input):
+        return normalize_git_workflow_request(
+            {"approved": True, "command": pending.get("command"), "missing": []},
+            pending,
+        )
+
+    if pending and CONFIRMATION_NO_RE.match(user_input):
+        return normalize_git_workflow_request(
+            {"approved": False, "cancelled": True, "command": pending.get("command"), "missing": []},
+            pending,
+        )
+
+    direct_command = extract_direct_git_command(user_input)
+    if direct_command and not (pending and CHANGE_COMMAND_RE.search(user_input)):
+        return normalize_git_workflow_request(
+            {
+                "cancelled": False,
+                "approved": None,
+                "change_requested": False,
+                "command": direct_command,
+                "missing": [],
+                "clarification_question": None,
+            },
+            pending,
+        )
+
+    prompt = get_git_workflow_request_extractor_prompt()
+    pending_json = to_pretty_json(pending or {})
+    raw = invoke_with_model_fallback(
+        prompt,
+        {
+            "user_input": user_input,
+            "pending_git_workflow_request": pending_json,
+        },
+    )
+
+    try:
+        request = extract_json_object(raw)
+    except Exception:
+        request = {
+            "command": None,
+            "missing": ["command"],
+            "clarification_question": "Which git or gh command should I run?",
+        }
+
+    request["user_input"] = user_input
+    return normalize_git_workflow_request(request, pending)
+
+def missing_fields_for_git_command(command: list[str]) -> list[str]:
+    if len(command) < 2:
+        return ["command"]
+
+    executable, subcommand = command[0], command[1]
+    args = command[2:]
+
+    if executable not in GIT_WORKFLOW_EXECUTABLES:
+        return ["command"]
+
+    if executable == "git":
+        if subcommand in {"checkout", "switch", "merge", "rebase", "reset", "revert", "cherry-pick"} and not args:
+            return ["target"]
+
+        if subcommand == "commit":
+            has_message = any(arg == "-m" or arg.startswith("-m") or arg == "--message" for arg in args)
+            if not has_message:
+                return ["message"]
+
+        if subcommand == "branch":
+            mutating_flags = {"-d", "-D", "-m", "-M", "-c", "-C", "--delete", "--move", "--copy"}
+            if any(arg in mutating_flags for arg in args) and len([arg for arg in args if not arg.startswith("-")]) == 0:
+                return ["target"]
+
+    if executable == "gh":
+        if subcommand == "pr" and len(args) >= 1 and args[0] in {"checkout", "merge", "close", "reopen", "ready", "lock", "unlock"} and len(args) == 1:
+            return ["target"]
+
+        if subcommand in {"repo", "issue", "release"} and len(args) >= 1 and args[0] in {"create", "delete", "edit", "close", "reopen"} and len(args) == 1:
+            return ["target"]
+
+    return []
+
+def clarification_for_git_workflow_request(request: dict) -> str:
+    missing = set(request.get("missing") or [])
+    command = request.get("command") or []
+
+    if "command" in missing:
+        return "Which git or gh command should I run?"
+
+    if "message" in missing:
+        return "What commit message should I use?"
+
+    if "target" in missing:
+        rendered = render_command(command) if command else "that command"
+        return f"What target should I use for `{rendered}`?"
+
+    return "I need one more detail before I can run that Git workflow command."
+
+def render_command(command: list[str]) -> str:
+    return " ".join(shlex.quote(token) for token in command)
+
+def classify_git_command_safety(command: list[str]) -> dict:
+    if not command:
+        return {
+            "is_dangerous": True,
+            "reason": "No command was provided.",
+            "category": "unknown",
+        }
+
+    executable = command[0]
+    if executable not in GIT_WORKFLOW_EXECUTABLES:
+        return {
+            "is_dangerous": True,
+            "reason": "Only git and gh commands are supported here.",
+            "category": "unknown",
+        }
+
+    if len(command) == 1:
+        return {
+            "is_dangerous": False,
+            "reason": "This only prints top-level command help.",
+            "category": "known_safe",
+        }
+
+    subcommand = command[1]
+
+    if executable == "git":
+        if subcommand in DANGEROUS_GIT_SUBCOMMANDS:
+            return {
+                "is_dangerous": True,
+                "reason": f"`git {subcommand}` can change repository or remote state.",
+                "category": "known_dangerous",
+            }
+
+        if subcommand == "branch":
+            mutating_flags = {"-d", "-D", "-m", "-M", "-c", "-C", "--delete", "--move", "--copy"}
+            if any(arg in mutating_flags for arg in command[2:]):
+                return {
+                    "is_dangerous": True,
+                    "reason": "`git branch` with mutating flags can change branch state.",
+                    "category": "known_dangerous",
+                }
+            nested = command[2] if len(command) > 2 else None
+            if nested in SAFE_GIT_NESTED_SUBCOMMANDS["branch"]:
+                return {
+                    "is_dangerous": False,
+                    "reason": "`git branch` is treated as read-only for listing/current-branch usage.",
+                    "category": "known_safe",
+                }
+            return {
+                "is_dangerous": True,
+                "reason": "`git branch` with a branch name can create or change branch state.",
+                "category": "known_dangerous",
+            }
+
+        if subcommand == "remote":
+            nested = command[2] if len(command) > 2 else None
+            if nested in SAFE_GIT_NESTED_SUBCOMMANDS["remote"]:
+                return {
+                    "is_dangerous": False,
+                    "reason": "`git remote` is treated as read-only for listing/show/get-url usage.",
+                    "category": "known_safe",
+                }
+            return {
+                "is_dangerous": True,
+                "reason": "`git remote` can change remote configuration with some subcommands.",
+                "category": "known_dangerous",
+            }
+
+        if subcommand in SAFE_GIT_SUBCOMMANDS:
+            return {
+                "is_dangerous": False,
+                "reason": f"`git {subcommand}` is treated as read-only.",
+                "category": "known_safe",
+            }
+
+    if executable == "gh":
+        nested = command[2] if len(command) > 2 else None
+
+        if subcommand in SAFE_GH_NESTED_SUBCOMMANDS and nested in SAFE_GH_NESTED_SUBCOMMANDS[subcommand]:
+            return {
+                "is_dangerous": False,
+                "reason": f"`gh {subcommand} {nested}` is treated as read-only.",
+                "category": "known_safe",
+            }
+
+        if subcommand in SAFE_GH_SUBCOMMANDS and nested is None:
+            return {
+                "is_dangerous": False,
+                "reason": f"`gh {subcommand}` is treated as read-only.",
+                "category": "known_safe",
+            }
+
+    return {
+        "is_dangerous": True,
+        "reason": "This command is not in the known safe command list, so it is treated as dangerous/unknown.",
+        "category": "unknown",
+    }
+
+def confirmation_for_git_command(command: list[str], safety: dict) -> str:
+    category = safety.get("category", "unknown")
+    label = "dangerous" if category != "unknown" else "dangerous/unknown"
+    return (
+        f"I can run `{render_command(command)}`, but it is classified as {label}.\n\n"
+        f"Reason: {safety.get('reason')}\n\n"
+        "Reply `yes` to run it, `no` to cancel, or send a changed command."
+    )
+
 def invoke_with_model_fallback(prompt, prompt_input: dict) -> str:
     model_router = RuntimeModelRouter()
     last_error: Exception | None = None
@@ -225,6 +568,12 @@ def invoke_with_model_fallback(prompt, prompt_input: dict) -> str:
 
 def classify_chat_intent_node(state: ChatGraphState) -> ChatGraphState:
     user_input = state.get("user_input", "")
+
+    if state.get("pending_git_workflow_request") is not None:
+        return {
+            "intent": "git_workflow_execution",
+            "intent_reason": "Continuing a pending Git workflow request.",
+        }
 
     if state.get("pending_report_request") is not None:
         return {
@@ -359,8 +708,58 @@ def promptgitx_report_generation_node(state: ChatGraphState) -> ChatGraphState:
     }
 
 def git_workflow_execution_node(state: ChatGraphState) -> ChatGraphState:
-    return{
-        "response": "This Feature is Currently Under Development."
+    request = extract_git_workflow_request(
+        state.get("user_input", ""),
+        state.get("pending_git_workflow_request"),
+    )
+
+    if request.get("cancelled") or request.get("approved") is False:
+        return {
+            "pending_git_workflow_request": None,
+            "git_workflow_request": request,
+            "response_type": "message",
+            "response": "Okay, I cancelled the pending Git workflow command.",
+        }
+
+    if request.get("missing") or not request.get("command"):
+        return {
+            "pending_git_workflow_request": request,
+            "git_workflow_request": request,
+            "response_type": "clarification",
+            "response": request.get("clarification_question") or clarification_for_git_workflow_request(request),
+        }
+
+    command = request["command"]
+    safety = classify_git_command_safety(command)
+    request["safety"] = safety
+
+    if safety["is_dangerous"] and request.get("approved") is not True:
+        request["awaiting_confirmation"] = True
+        return {
+            "pending_git_workflow_request": request,
+            "git_workflow_request": request,
+            "response_type": "confirmation",
+            "response": confirmation_for_git_command(command, safety),
+        }
+
+    try:
+        from ..gitcodes.command_runner import run_command
+
+        output = run_command(command)
+    except Exception as error:
+        return {
+            "pending_git_workflow_request": None,
+            "git_workflow_request": request,
+            "response_type": "error",
+            "response": f"Failed to run `{render_command(command)}`: {error}",
+        }
+
+    rendered_output = output or "(command completed with no output)"
+    return {
+        "pending_git_workflow_request": None,
+        "git_workflow_request": request,
+        "response_type": "command_output",
+        "response": f"Ran `{render_command(command)}`:\n\n```text\n{rendered_output}\n```",
     }
 
 def out_of_scope_node(state: ChatGraphState) -> ChatGraphState:

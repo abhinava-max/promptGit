@@ -20,16 +20,18 @@ Available report modes are "staged changes", "last commit", "single commit",
 "multiple commits", "last N commits", "compare", and "pull request".
 
 Routing priority:
-1. If the user asks to execute, mutate, or plan a Git/GitHub operation, route
+1. If the user asks PromptGitX to execute or mutate a real repository, route
    to git_workflow_execution. This includes push, pull, commit, checkout,
    switch, merge, rebase, reset, revert, stash, tag, branch creation/deletion,
    add, restore, fetch, clone, opening/closing/merging PRs, or running git/gh
-   commands.
+   commands against the user's current repository.
 2. If the request mixes Git/GitHub execution with report generation, route to
    git_workflow_execution because repository-changing work must be handled
    before reporting.
-3. If the user asks for conceptual Git/GitHub knowledge without asking you to
-   run or plan a command, route to git_github_question.
+3. If the user asks for conceptual Git/GitHub knowledge, explanations,
+   examples, syntax, or a command they can run themselves, route to
+   git_github_question. This remains true even if the example mentions
+   repo-changing commands like rebase, reset, merge, checkout, push, or pull.
 4. If the user asks how to use PromptGitX, route to promptgitx_query.
 5. If the user asks PromptGitX to create a review report and does not ask for
    Git/GitHub execution, route to promptgitx_report_generation.
@@ -41,7 +43,7 @@ Important distinction:
   route to promptgitx_report_generation.
 
 Definitions:
-git_workflow_execution: user wants you to run or plan a git/gh command or modify repo state.
+git_workflow_execution: user wants PromptGitX to run a git/gh command or modify repo state.
 git_github_question: user asks general conceptual Git/Github/git cli/gh cli related questions.
 promptgitx_query: user asks about PromptGitX usage, commands, features, reports, config, analyze, chat.
 promptgitx_report_generation: user asks PromptGitX to generate a review report or compare/review/analyze a report target.
@@ -55,6 +57,9 @@ Routing examples:
 - "how do I generate a report for my changes?" -> promptgitx_query
 - "what is a pull request?" -> git_github_question
 - "how do I checkout a PR with gh?" -> git_github_question
+- "give me a single line command to rebase 5 branches" -> git_github_question
+- "show me the git command for rebasing my branch on main" -> git_github_question
+- "explain git rebase --onto" -> git_github_question
 - "generate a report for my changes" -> promptgitx_report_generation
 - "create a PR report" -> promptgitx_report_generation
 - "compare my staged changes" -> promptgitx_report_generation
@@ -63,6 +68,8 @@ Routing examples:
 - "review PR 12" -> promptgitx_report_generation
 - "create a report for the last 3 commits" -> promptgitx_report_generation
 - "run git status" -> git_workflow_execution
+- "run git rebase main" -> git_workflow_execution
+- "rebase my current branch on main" -> git_workflow_execution
 - "create a branch for me" -> git_workflow_execution
 - "push my commits and generate me a report" -> git_workflow_execution
 - "commit my changes and create a report" -> git_workflow_execution
@@ -166,6 +173,43 @@ Rules:
 - If a pending request exists and the user provides a valid missing value, merge it into the request.
 """.strip()
 
+GIT_WORKFLOW_REQUEST_EXTRACTOR_SYSTEM_PROMPT = """
+You extract a single Git or GitHub CLI workflow command from a chat message.
+
+Use the pending request, if provided, as memory from the previous turn.
+The new user message may complete missing information, approve execution,
+reject execution, cancel the request, or ask to change the command.
+
+Return JSON only with this exact shape:
+{{
+  "cancelled": false,
+  "approved": null,
+  "change_requested": false,
+  "command": null,
+  "missing": [],
+  "clarification_question": null
+}}
+
+Rules:
+- command must be a list of command tokens, for example ["git", "status"].
+- Only extract commands that start with "git" or "gh".
+- If the user gives a direct command, preserve the tokens exactly.
+- If the user asks naturally, produce the most likely git/gh command.
+- If required details are missing, set command to null or a partial command,
+  set missing to short field names, and ask a concise clarification question.
+- If the user asks to commit but gives no message, missing must include "message".
+- If the user asks to switch, checkout, merge, rebase, reset, revert, cherry-pick,
+  tag, delete, rename, push to a new upstream, or create a branch without naming
+  the required target, ask for that target.
+- If the user replies yes/continue/proceed/run it while pending confirmation,
+  set approved true and keep the pending command.
+- If the user replies no/don't/cancel/stop/nevermind, set approved false or
+  cancelled true.
+- If the user asks to change, edit, or use a different command, set
+  change_requested true and extract the new command if present.
+- Do not include markdown or explanations.
+""".strip()
+
 
 def get_chat_intent_prompt() -> ChatPromptTemplate:
     return ChatPromptTemplate.from_messages(
@@ -201,6 +245,18 @@ def get_report_request_extractor_prompt() -> ChatPromptTemplate:
             (
                 "human",
                 "Pending request JSON:\n{pending_report_request}\n\nUser message:\n{user_input}",
+            ),
+        ]
+    )
+
+
+def get_git_workflow_request_extractor_prompt() -> ChatPromptTemplate:
+    return ChatPromptTemplate.from_messages(
+        [
+            ("system", GIT_WORKFLOW_REQUEST_EXTRACTOR_SYSTEM_PROMPT),
+            (
+                "human",
+                "Pending request JSON:\n{pending_git_workflow_request}\n\nUser message:\n{user_input}",
             ),
         ]
     )
